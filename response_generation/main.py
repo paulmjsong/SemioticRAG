@@ -49,11 +49,9 @@ def main():
             print("Goodbye!")
             break
 
-        start_time = time.time()                 # ⏱️ TIMER
-
+        start_time = time.time()
         response = generate_response(llm, embedder, retriever, [SHARED_LABEL], query, image_path)
-
-        elapsed_time = time.time() - start_time  # ⏱️ TIMER
+        elapsed_time = time.time() - start_time
 
         print("\nANSWER:\n", response)
         print(f"\nResponded to user query in {elapsed_time:.2f} seconds")

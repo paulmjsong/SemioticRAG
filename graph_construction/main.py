@@ -34,8 +34,8 @@ def close_driver(driver: Driver) -> None:
 
 # ---------------- MAIN ----------------
 def main():
-    src_path = "graph_construction/scraped.json"
-    dst_path = "graph_construction/extracted.json"
+    src_path = "data/scraped.json"
+    dst_path = "data/extracted.json"
     
     if not os.path.exists(src_path):
         print(f"❗ Text file {src_path} not found. Please provide a valid text file.")
