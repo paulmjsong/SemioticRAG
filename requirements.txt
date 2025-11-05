@@ -1,0 +1,9 @@
+gradio
+neo4j
+numpy
+openai
+openpyxl
+pandas
+python-dotenv
+tqdm
+wikipedia
