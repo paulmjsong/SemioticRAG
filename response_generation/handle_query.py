@@ -1,4 +1,4 @@
-import asyncio, json, re
+import datetime, json, os, re
 from typing import Dict, List
 
 from neo4j import GraphDatabase
@@ -159,7 +159,12 @@ def generate_response(llm: OpenAILLM, retriever: VectorCypherRetriever, embedder
             {"role": "user", "content": content},
         ],
     )
-    return result.choices[0].message.content.strip()
+    response = result.choices[0].message.content.strip()
+    save_history([
+        {"role": "user", "content": content},
+        {"role": "assistant", "content": response},
+    ])
+    return response
 
 
 # ---------------- UTILS ----------------
@@ -169,3 +174,11 @@ def generate_response(llm: OpenAILLM, retriever: VectorCypherRetriever, embedder
 #     pil_img.save(buffered, format="PNG")
 #     img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
 #     return f"data:image/png;base64,{img_str}"
+
+def save_history(history: List[Dict]=[]) -> None:
+    folder = "./chat_logs"
+    os.makedirs(folder, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d")
+    filename = os.path.join(folder, f"{timestamp}.json")
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
