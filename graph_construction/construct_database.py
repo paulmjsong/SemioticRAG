@@ -12,11 +12,11 @@ from neo4j_graphrag.experimental.components.resolver import (
 
 
 # ---------------- ADD ENTITIES TO DB ----------------
-def build_database(driver: Driver, json_path: str, embedder: OpenAILLM, embed_dims: int, shared_label: str, index_name: str) -> None:
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, EMBED_DIMS: int, SHARED_LABEL: str, INDEX_NAME: str) -> None:
+    with open(dst_path, "r", encoding="utf-8") as file:
+        data = json.load(file)
     
-    ensure_vector_index(driver, embed_dims, shared_label, index_name)
+    ensure_vector_index(driver, EMBED_DIMS, SHARED_LABEL, INDEX_NAME)
     
     node_ids: List[int] = []
     vectors: List[List[float]] = []
@@ -49,10 +49,20 @@ def build_database(driver: Driver, json_path: str, embedder: OpenAILLM, embed_di
 
 
 # ---------------- NEO4J OPERATIONS ----------------
-def create_node(tx, entity: Dict, shared_label: str) -> str:
+def ensure_vector_index(driver: Driver, EMBED_DIMS: int, SHARED_LABEL: str, INDEX_NAME: str) -> None:
+    create_vector_index(
+        driver=driver,
+        name=INDEX_NAME,
+        label=SHARED_LABEL,
+        embedding_property="embedding",
+        dimensions=EMBED_DIMS,
+        similarity_fn="cosine",
+    )
+
+def create_node(tx, entity: Dict, SHARED_LABEL: str) -> str:
     label = sanitize_label(entity["entity_type"])
     query = f"""
-    MERGE (n:{shared_label}:{label} {{name: $name}})
+    MERGE (n:{SHARED_LABEL}:{label} {{name: $name}})
     ON CREATE SET
         n.description = $description
     ON MATCH SET
@@ -66,11 +76,11 @@ def create_node(tx, entity: Dict, shared_label: str) -> str:
     ).single()
     return rec["eid"]
 
-def create_relationship(tx, rel: Dict, shared_label: str) -> None:
+def create_relationship(tx, rel: Dict, SHARED_LABEL: str) -> None:
     rel_type = rel["relationship_type"].upper().replace(" ", "_")
     query = f"""
-    MATCH (a:{shared_label} {{name: $source}})
-    MATCH (b:{shared_label} {{name: $target}})
+    MATCH (a:{SHARED_LABEL} {{name: $source}})
+    MATCH (b:{SHARED_LABEL} {{name: $target}})
     MERGE (a)-[r:{rel_type}]->(b)
     ON CREATE SET r.description = $description
     ON MATCH  SET r.description = coalesce(r.description, $description)
@@ -82,17 +92,7 @@ def create_relationship(tx, rel: Dict, shared_label: str) -> None:
         description=rel.get("relationship_description"),
     )
 
-def ensure_vector_index(driver: Driver, embed_dims: int, shared_label: str, index_name: str) -> None:
-    create_vector_index(
-        driver=driver,
-        name=index_name,
-        label=shared_label,
-        embedding_property="embedding",
-        dimensions=embed_dims,
-        similarity_fn="cosine",
-    )
-
-async def resolve_duplicates(driver: Driver, shared_label: str) -> None:
+async def resolve_duplicates(driver: Driver, SHARED_LABEL: str) -> None:
     if not apoc_available(driver):
         print("⚠️ APOC not available; skipping entity resolution.")
         return
@@ -104,7 +104,7 @@ async def resolve_duplicates(driver: Driver, shared_label: str) -> None:
     # Fuzzy match on :__Entity__ by 'name' property
     fuzzy = FuzzyMatchResolver(
         driver=driver,
-        filter_query=f"WHERE entity:`{shared_label}`",
+        filter_query=f"WHERE entity:`{SHARED_LABEL}`",
         resolve_properties=["name"],
         similarity_threshold=0.95,
     )

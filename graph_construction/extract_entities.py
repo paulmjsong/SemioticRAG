@@ -6,19 +6,18 @@ from prompts import CONSTRUCTION_PROMPT
 
 
 # ---------------- EXTRACT ENTITIES ----------------
-def extract_data(llm: OpenAILLM, save_path: str, srcs_path: str) -> None:
-    with open(srcs_path, "r") as srcs_file:
-        with open(save_path, "w", encoding="utf-8") as save_file:
-            for item in tqdm(srcs_file.readlines(), desc="Extracting entities and relationships"):
-                result = llm.invoke(
-                    f"Input data:\n{item}\n\n{CONSTRUCTION_PROMPT}",
-                )
-                entities, relations = parse_extracted_data(result.content)
-                record = {
-                    "entities": entities,
-                    "relations": relations,
-                }
-                save_file.write(f"{record}\n")
+def extract_data(llm: OpenAILLM, src_path: str, dst_path: str) -> None:
+    with open(src_path, "r") as src_file, open(dst_path, "w", encoding="utf-8") as dst_file:
+        for item in tqdm(src_file.readlines(), desc="Extracting entities and relationships"):
+            result = llm.invoke(
+                f"Input data:\n{item}\n\n{CONSTRUCTION_PROMPT}",
+            )
+            entities, relations = parse_extracted_data(result.content)
+            record = {
+                "entities": entities,
+                "relations": relations,
+            }
+            dst_file.write(f"{record}\n")
 
 # TODO: Rewrite this function to properly parse the LLM output
 def parse_extracted_data(data: str) -> tuple[list[str], list[str]]:

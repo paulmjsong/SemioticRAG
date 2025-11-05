@@ -34,18 +34,18 @@ def close_driver(driver: Driver) -> None:
 
 # ---------------- MAIN ----------------
 def main():
-    srcs_path = "graph_construction/srcs_list.json"
-    save_path = "graph_construction/extracted.json"
+    src_path = "graph_construction/scraped.json"
+    dst_path = "graph_construction/extracted.json"
     
-    if not os.path.exists(srcs_path):
-        print(f"❗ Source file {srcs_path} not found. Please provide a valid source file.")
+    if not os.path.exists(src_path):
+        print(f"❗ Text file {src_path} not found. Please provide a valid text file.")
         return
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
+    if not os.path.exists(dst_path):
+        os.mkdir(dst_path)
     
     llm = OpenAILLM(model_name=GENERATION_MODEL, api_key=OPENAI_API_KEY)
     print("🔄 Extracting entities and relationships...")
-    extract_data(llm, save_path, srcs_path)
+    extract_data(llm, src_path, dst_path)
 
     driver = GraphDatabase.driver(URI, auth=AUTH)
     print("🧹 Clearing existing database...")
@@ -53,7 +53,7 @@ def main():
     
     embedder = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
     print("🔄 Building database from extracted entities...")
-    build_database(driver, save_path, embedder, EMBED_DIMS, SHARED_LABEL, INDEX_NAME)
+    build_database(driver, dst_path, embedder, EMBED_DIMS, SHARED_LABEL, INDEX_NAME)
 
     print("✅ Graph built, single vector index populated, and deduplicated.")
     close_driver(driver)

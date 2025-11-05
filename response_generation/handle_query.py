@@ -11,10 +11,10 @@ from prompts import IMG2GRAPH_PROMPT, RETRIEVAL_CYPHER, SYSTEM_PROMPT
 
 
 # ---------------- CREATE RETRIEVER ----------------
-def create_retriever(driver: GraphDatabase.driver, embedder: OpenAIEmbeddings, index_name: str):
+def create_retriever(driver: GraphDatabase.driver, embedder: OpenAIEmbeddings, INDEX_NAME: str):
     return VectorCypherRetriever(
         driver=driver,
-        index_name=index_name,
+        index_name=INDEX_NAME,
         retrieval_query=build_retriever_query(),
         embedder=embedder,
         result_formatter=formatter,

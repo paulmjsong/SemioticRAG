@@ -1,41 +1,30 @@
 import requests
+from tqdm import tqdm
 
 
-# ---------------- EXTRACT ENTITIES ----------------
-def get_from_encykorea(srcs_path: str, api_key: str, enpoint_url: str) -> None:
+# ---------------- GET DATA ----------------
+def get_from_encykorea(src_path: str, dst_path:str, API_KEY: str, ENDPOINT_URL: str) -> None:
     headers = {
-        "X-API-Key": api_key,
-        "Accept": 'application/json',
+        "X-API-Key": API_KEY,
     }
-    query = "민화"
-    with open(srcs_path, "a") as srcs_file:
-        params = {
-            "q": query,
-            "page": 1,
-            "size": 10,
-        }
-        response = requests.get(enpoint_url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        for item in data.get("data", []):
-            if "content" in item:
-                srcs_file.write(item.content + "\n")
+    with open(src_path, "r") as src_file, open(dst_path, "a") as dst_file:
+        for line in tqdm(src_file.readlines(), desc="Fetching data from Encyclopedia of Korean Culture"):
+            eid = get_eid_from_line(line)
+            response = requests.get(url=ENDPOINT_URL+eid, headers=headers, timeout=30)
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            article = data.get("article")
+            print(article.get("headword"))
+            dst_file.write(f"{article.get("body")}\n")
 
-def get_from_heritage(srcs_path: str, api_key: str, enpoint_url: str) -> None:
-    headers = {
-        "X-API-Key": api_key,
-        "Accept": 'application/json',
-    }
-    query = "민화"
-    with open(srcs_path, "a") as srcs_file:
-        params = {
-            "q": query,
-            "page": 1,
-            "size": 10,
-        }
-        response = requests.get(enpoint_url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        for item in data.get("data", []):
-            if "content" in item:
-                srcs_file.write(item.content + "\n")
+# TODO: Implement this function
+def get_from_heritage(src_path: str, dst_path:str, API_KEY: str, ENDPOINT_URL: str) -> None:
+    return
+
+
+# ---------------- UTILS ----------------
+# TODO: Implement this function
+def get_eid_from_line(line: str) -> str:
+    return "E0048152"
