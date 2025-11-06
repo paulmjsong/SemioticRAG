@@ -3,7 +3,7 @@ from tqdm import tqdm
 
 
 # ---------------- SCRAPE DATA ----------------
-def fetch_from_encykorea(src_path: str, dst_path:str, keywords: list[str], API_KEY: str, ENDPOINT_URL: str) -> None:
+def fetch_from_encykorea(src_path: str, dst_path: str, keywords: list[str], API_KEY: str, ENDPOINT_URL: str) -> None:
     headers = { "X-API-Key": API_KEY }
     fetched = []
 
@@ -30,9 +30,37 @@ def fetch_from_encykorea(src_path: str, dst_path:str, keywords: list[str], API_K
     with open(dst_path, "a", encoding="utf-8") as dst_file:
         json.dump(fetched, dst_file, ensure_ascii=False, indent=4)
 
-# TODO: Implement this function
-def fetch_from_heritage(src_path: str, dst_path:str, API_KEY: str, ENDPOINT_URL: str) -> None:
-    return
+# TODO: Check the parameters needed for the KHS API
+def fetch_from_heritage(src_path: str, dst_path:str, keywords: list[str], API_KEY: str, ENDPOINT_URL: str) -> None:
+    headers = { "X-API-Key": API_KEY }
+    fetched = []
+
+    if src_path.endswith(".csv"):
+        df = pd.read_csv(src_path, header=None, dtype=str, encoding="utf-8")
+    else:
+        df = pd.read_excel(src_path, header=None, dtype=str, encoding="utf-8")
+    
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching data from Korea Heritage Service"):
+        line = ",".join(map(str, row.values))
+        eid = get_eid_from_line(line, keywords)
+        if eid is None:
+            continue
+        params = {
+            "ccbaKdcd": "[Enter field id]",
+            "ccbaAsno": eid,
+            "ccbaCtcd": "[Enter region id]",
+        }
+        response = requests.get(url=ENDPOINT_URL, params=params, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        fetched.append({
+            "headword": data.get("ccbaAsno"),
+            "body": data.get("content").replace('\r', '').split('\n', 1)[1].strip(),
+        })
+
+    with open(dst_path, "a", encoding="utf-8") as dst_file:
+        json.dump(fetched, dst_file, ensure_ascii=False, indent=4)
 
 
 # ---------------- UTILS ----------------
