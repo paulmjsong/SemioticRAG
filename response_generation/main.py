@@ -1,4 +1,4 @@
-import os, time
+import json, os, time
 from dotenv import load_dotenv
 
 from neo4j import Driver, GraphDatabase
@@ -38,23 +38,38 @@ def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     embedder = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
     llm = OpenAILLM(model_name=GENERATION_MODEL, api_key=OPENAI_API_KEY)
-    
     retriever = create_retriever(driver, embedder, SHARED_INDEX)
-    image_path = "https://mblogthumb-phinf.pstatic.net/MjAyMTA4MjRfMjQ5/MDAxNjI5NzkwMzI0NzAx.1F0swz3TLDYa929hy5gq1YKlhpRHuUKmaG62K10Trl0g.FBk65xo5T9h5zeh3RirPMwO3ohpXnGVr3VwHbES6vaAg.PNG.dbs1769/Untitled-1-01.png?type=w966"
-
-    print("🤖 Ready to answer questions about Korean folk art! (type 'exit' to quit)")
-    while True:
-        query = input("\nQUERY: ")
-        if query.lower() in ["exit", "quit"]:
-            print("Goodbye!")
-            break
-
+    
+    input_examples = [
+        {
+            "query": "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
+            "image": "painting_examples/담배피우는호랑이.png",
+        },
+        {
+            "query": "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
+            "image": "painting_examples/일월오봉도.webp",
+        },
+        {
+            "query": "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
+            "image": "painting_examples/작호도.jpg",
+        },
+    ]
+    output_examples = []
+    
+    for input in input_examples:
         start_time = time.time()
-        response = generate_response(llm, embedder, retriever, [SHARED_LABEL], query, image_path)
+        response = generate_response(llm, embedder, retriever, [SHARED_LABEL], input["query"], input["image"])
         elapsed_time = time.time() - start_time
 
-        print("\nANSWER:\n", response)
-        print(f"\nResponded to user query in {elapsed_time:.2f} seconds")
+        output_examples.append({
+            "input" : input,
+            "output": response,
+            "time"  : elapsed_time,
+        })
+    
+    dst_path = "output_examples/output.json"
+    with open(dst_path, "w", encoding="utf-8") as f:
+        json.dump(output_examples, f, ensure_ascii=False, indent=4)
     
     close_driver(driver)
 

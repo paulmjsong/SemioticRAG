@@ -2,3 +2,4 @@
 **/chat_logs/
 .gradio/
 .env
+.gitignore

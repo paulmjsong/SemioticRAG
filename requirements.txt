@@ -1,11 +1,9 @@
 gradio
-json
 neo4j
 numpy
 openai
 openpyxl
 pandas
 python-dotenv
-re
 requests
 tqdm
