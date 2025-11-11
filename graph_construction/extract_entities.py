@@ -37,8 +37,9 @@ def extract_data(llm: OpenAILLM, src_path: str, dst_path: str, checkpoint: int, 
                     input=prompt.format(passage=chunk),
                     system_instruction=SYSTEM_PROMPT,
                 )
-                cleaned_string = clean_llm_output(result.content)
-                content = json.loads(cleaned_string)
+                # cleaned_string = clean_llm_output(result.content)
+                # content = json.loads(cleaned_string)
+                content = json.loads(result.content)
                 data['entities'].extend(content['entities'])
                 data['relations'].extend(content['relations'])
                 # break # Only process first chunk for now
@@ -55,5 +56,5 @@ def extract_data(llm: OpenAILLM, src_path: str, dst_path: str, checkpoint: int, 
 
 # ---------------- UTILS ----------------
 def clean_llm_output(output: str) -> str:
-    cleaned = re.sub(r'[\x00-\x1f]', '', output, flags=re.UNICODE)
+    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', output, flags=re.UNICODE)
     return cleaned
