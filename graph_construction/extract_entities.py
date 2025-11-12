@@ -30,7 +30,7 @@ def extract_data(llm: OpenAILLM, src_path: str, dst_path: str, checkpoint: int, 
                 text[i : i + chunk_size]
                 for i in range(0, len(text), chunk_size)
             ]
-            for chunk in tqdm(chunks, desc=f"Processing entry {i+1}/{len(entries)}", leave=False):
+            for chunk in tqdm(chunks, desc=f"🔄 Processing entry {i+1}/{len(entries)}", leave=False):
                 if len(chunk.strip()) == 0:
                     continue
                 result = llm.invoke(

@@ -40,7 +40,7 @@ def fetch_from_heritage(src_path: str, dst_path:str, keywords: list[str], API_KE
     else:
         df = pd.read_excel(src_path, header=None, dtype=str, encoding="utf-8")
     
-    for _, row in tqdm(df.iterrows(), desc="Fetching data from Korea Heritage Service"):
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching data from Korea Heritage Service"):
         line = ",".join(map(str, row.values))
         eid = get_eid_from_line(line, keywords)
         if eid is None:
