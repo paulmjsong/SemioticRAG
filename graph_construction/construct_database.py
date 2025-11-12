@@ -24,8 +24,8 @@ def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, EMBED_DIM
     
     # TODO: Batch inserts for performance
     with driver.session() as session:
-        # Insert nodes
-        for entity in tqdm(data["entities"], total=len(data["entities"]), desc="Upserting entities"):
+        # Upsert nodes
+        for entity in tqdm(data["entities"], total=len(data["entities"]), desc="⬆️  Upserting entities"):
             node_id = session.execute_write(create_node, entity)
             node_ids.append(node_id)
 
@@ -33,13 +33,7 @@ def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, EMBED_DIM
             if entity.get("aliases"):
                 embed_text += f" | Aliases: {', '.join(entity['aliases'])}"
             node_embeds.append(embedder.embed_query(embed_text))
-
-        # Insert edges
-        for rel in tqdm(data["relations"], total=len(data["relations"]), desc="Upserting relationships"):
-            joint_node_id = session.execute_write(create_edges, rel)
-            if joint_node_id:
-                node_ids.extend(joint_node_id)
-
+        
         # Batch upsert node embeddings
         if node_ids:
             upsert_vectors(
@@ -49,9 +43,17 @@ def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, EMBED_DIM
                 embeddings=node_embeds,
                 entity_type=EntityType.NODE,
             )
+        
+        # Upsert edges
+        for rel in tqdm(data["relations"], total=len(data["relations"]), desc="⬆️  Upserting relationships"):
+            joint_node_id = session.execute_write(create_edges, rel)
+            if joint_node_id:
+                node_ids.extend(joint_node_id)
     
-    print("  🔍 Resolving duplicate entities...")
+    print("🔍 Resolving duplicate entities...")
     asyncio.run(resolve_duplicates(driver))
+    
+    print("✅ Graph built, single vector index populated, and deduplicated.")
 
 
 # ---------------- NEO4J OPERATIONS ----------------
@@ -66,8 +68,8 @@ def ensure_vector_index(driver: Driver, EMBED_DIMS: int, SHARED_LABEL: str, INDE
     )
 
 def create_node(tx, entity: Dict) -> Optional[str]:
-    entity_type = sanitize_label(entity["type"])
-    if entity_type not in {"Form", "Concept", "Myth"}:
+    entity_type = entity["type"]
+    if entity_type not in {"Form", "Concept", "Myth", "JointConcept"}:
         raise ValueError(f"Unsupported entity type: {entity_type}")
     
     query = f"""
@@ -76,65 +78,80 @@ def create_node(tx, entity: Dict) -> Optional[str]:
     ON MATCH  SET n.description = coalesce(n.description, $description)
     RETURN elementId(n) AS eid
     """
-    # print(f"  Creating node: {entity['name']}")
     rec = tx.run(
         query, 
-        name=entity["name"].replace(" ", ""), 
+        name=sanitize_label(entity["name"]),
         description=entity["description"],
     ).single()
     
     return rec["eid"]
 
 def create_edges(tx, rel: Dict) -> Optional[str]:
-
-    def run_query(source: str, target: str, rel_type: str) -> None:
+    def run_query(source: str, source_type: str, target: str, target_type: str, rel_type: str) -> None:
         query = f"""
-        MATCH (a {{name: $source}})
-        MATCH (b {{name: $target}})
+        MATCH (a:{source_type} {{name: $source}})
+        MATCH (b:{target_type} {{name: $target}})
         MERGE (a)-[r:{rel_type}]->(b)
         ON CREATE SET r.description = $description
         ON MATCH  SET r.description = coalesce(r.description, $description)
+        RETURN count(a) AS a_count, count(b) AS b_count
         """
-        # print(f"  Creating edge: {source} -[{rel_type}]-> {target}")
-        tx.run(
+        result = tx.run(
             query,
             source=source,
             target=target,
             description=rel.get("description"),
-        )
+        ).single()
+        if result["a_count"] == 0 or result["b_count"] == 0:
+            print(f"⚠️ Warning: could not create edge {source}-[{rel_type}]->{target}")
     
     rel_type = rel["type"].upper().replace(" ", "_")
     node_id = None
 
     if rel_type == "CONNOTES":
+        # Create edge from Form to Concept
         run_query(
-            source=rel["source"],
-            target=rel["target"],
+            source=sanitize_label(rel["source"]),
+            source_type="Form",
+            target=sanitize_label(rel["target"]),
+            target_type="Concept",
             rel_type=rel_type,
         )
     elif rel_type == "GENERATES_MYTH":
-        # Create intermediate JointForm node
-        joint_name = "+".join(sorted(rel["source_concepts"]))
-        joint_desc = f"Joint form of concepts: {', '.join(rel['source_concepts'])}"
-        joint_form = {
-            "type": "JointForm",
-            "name": joint_name,
-            "description": joint_desc,
-        }
-        node_id = create_node(tx, joint_form)
-        # Create edges from Concepts to JointForm
-        for source in rel["source_concepts"]:
+        if len(rel["source_concepts"]) == 1:
+            # Create edge from Concept to Myth
             run_query(
-                source=source,
-                target=joint_name,
-                rel_type="PART_OF_JOINT_FORM",
+                source=sanitize_label(rel["source_concepts"][0]),
+                source_type="Concept",
+                target=sanitize_label(rel["target"]),
+                target_type="Myth",
+                rel_type=rel_type,
             )
-        # Create edge from JointForm to target myth
-        run_query(
-            source=joint_name,
-            target=rel["target"],
-            rel_type=rel_type,
-        )
+        else:
+            # Create intermediate JointConcept node
+            joint_concept = {
+                "type": "JointConcept",
+                "name": "+".join(sorted(rel["source_concepts"])),
+                "description": f"Joint form of concepts: {', '.join(rel['source_concepts'])}",
+            }
+            node_id = create_node(tx, joint_concept)
+            # Create edges from Concepts to JointConcept
+            for source in rel["source_concepts"]:
+                run_query(
+                    source=sanitize_label(source),
+                    source_type="Concept",
+                    target=sanitize_label(joint_concept["name"]),
+                    target_type="JointConcept",
+                    rel_type="PART_OF",
+                )
+            # Create edge from JointConcept to Myth
+            run_query(
+                source=sanitize_label(joint_concept["name"]),
+                source_type="JointConcept",
+                target=sanitize_label(rel["target"]),
+                target_type="Myth",
+                rel_type=rel_type,
+            )
     else:
         raise ValueError(f"Unsupported relationship type: {rel_type}")
     
@@ -144,13 +161,11 @@ async def resolve_duplicates(driver: Driver) -> None:
     if not apoc_available(driver):
         print("⚠️ APOC not available; skipping entity resolution.")
         return
-    
     # Exact match first
     exact = SinglePropertyExactMatchResolver(driver=driver)
     await exact.run()
-
-    # Fuzzy match on :Form, :Concept, :Myth by 'name' property
-    for label in ["Form", "Concept", "Myth"]:
+    # Fuzzy match by label and name
+    for label in ["Form", "Concept", "Myth", "JointConcept"]:
         fuzzy = FuzzyMatchResolver(
             driver=driver,
             filter_query=f"WHERE entity:`{label}`",
@@ -171,7 +186,7 @@ def clear_database(driver: Driver) -> None:
             session.run(f"DROP INDEX {name} IF EXISTS")
         # Delete nodes/relationships
         session.run("MATCH (n) DETACH DELETE n")
-    # print("🗑️  Dropped all constraints, indexes, and data.")
+    print("🧹 Database cleared.")
 
 
 # ---------------- UTILS ----------------
