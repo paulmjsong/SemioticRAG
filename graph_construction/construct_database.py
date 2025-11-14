@@ -13,16 +13,15 @@ from neo4j_graphrag.experimental.components.resolver import (
 
 
 # ---------------- ADD ENTITIES TO DB ----------------
-def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, EMBED_DIMS: int, SHARED_LABEL: str, INDEX_NAME: str) -> None:
+def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_dims: int, seed_label: str, index_name: str) -> None:
     with open(dst_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     
-    ensure_vector_index(driver, EMBED_DIMS, SHARED_LABEL, INDEX_NAME)
+    ensure_vector_index(driver, embed_dims, seed_label, index_name)
     
     node_ids: List[str] = []
     node_embeds: List[List[float]] = []
     
-    # TODO: Batch inserts for performance
     with driver.session() as session:
         # Upsert nodes
         for entity in tqdm(data["entities"], total=len(data["entities"]), desc="⬆️  Upserting entities"):
@@ -57,13 +56,13 @@ def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, EMBED_DIM
 
 
 # ---------------- NEO4J OPERATIONS ----------------
-def ensure_vector_index(driver: Driver, EMBED_DIMS: int, SHARED_LABEL: str, INDEX_NAME: str) -> None:
+def ensure_vector_index(driver: Driver, embed_dims: int, seed_label: str, index_name: str) -> None:
     create_vector_index(
         driver=driver,
-        name=INDEX_NAME,
-        label=SHARED_LABEL,
+        name=index_name,
+        label=seed_label,
         embedding_property="embedding",
-        dimensions=EMBED_DIMS,
+        dimensions=embed_dims,
         similarity_fn="cosine",
     )
 

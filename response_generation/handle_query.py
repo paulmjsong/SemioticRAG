@@ -1,215 +1,158 @@
-import base64, datetime, json, os
-from typing import Dict, List
+import base64, json, os
+from datetime import datetime
+from openai import OpenAI
+from typing import Dict, List, Tuple
 
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, Record
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
-from neo4j_graphrag.llm import OpenAILLM
+# from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.types import RetrieverResultItem
 
-from prompts import IMG2GRAPH_PROMPT, IMG2TEXT_PROMPT, RETRIEVAL_CYPHER, SYSTEM_PROMPT
+from prompts import IMG2GRAPH_PROMPT, IMG2TEXT_PROMPT, RETRIEVAL_CYPHER, GENERATION_PROMPT
 
 
 # ---------------- CREATE RETRIEVER ----------------
-def create_retriever(driver: GraphDatabase.driver, embedder: OpenAIEmbeddings, INDEX_NAME: str):
+def create_retriever(driver: GraphDatabase.driver, embedder: OpenAIEmbeddings, seed_label: str, index_name: str) -> VectorCypherRetriever:
     return VectorCypherRetriever(
         driver=driver,
-        index_name=INDEX_NAME,
-        retrieval_query=build_retriever_query(),
+        index_name=index_name,
+        retrieval_query=build_retriever_query(seed_label),
         embedder=embedder,
         result_formatter=formatter,
     )
 
-def build_retriever_query(max_hops=2, directed=False):
-    hops = max(1, min(max_hops, 10))
+def build_retriever_query(seed_label: str, directed: bool=True) -> str:
     arrow = "->" if directed else "-"
-    pattern = f"-[r*1..{hops}]{arrow}"
+    pattern = f"(node:{seed_label})-[*1..]{arrow}(nbr:Myth)"
 
     # Use a marker __PATTERN__ we replace below (avoid f-strings to keep { } intact)
     cypher = RETRIEVAL_CYPHER
     return cypher.replace("__PATTERN__", pattern)
 
 
-def formatter(rec):
-    def _clean_text(s):
-        if not s:
-            return ""
+def formatter(rec: Record) -> RetrieverResultItem:
+    def clean_text(s):
         # do all escaping outside f-strings
-        return str(s).replace("\n", " ").replace("\r", " ").strip()
+        return "" if not s else str(s).replace("\n", " ").replace("\r", " ").strip()
 
     nodes = rec["nodes"]
     rels  = rec["rels"]
+    id2name  = {}
+    id2label = {}
 
-    id2name = {}
-    id2lbls = {}
+    text_nodes = []
+    for n in nodes:
+        nid     = n["id"]
+        labels  = ":".join(n["labels"])
+        name    = n["name"]
+        desc    = clean_text(n["description"])
+        rank    = float(n["rank"])
 
-    node_lines = []
-    for i, n in enumerate(nodes):
-        nid      = n["id"]
-        labels   = ":".join(n.get("labels", []))
-        name     = n.get("name") or "(unnamed)"
-        desc     = _clean_text(n.get("description", ""))
-        degree   = n.get("degree", 0)
-        rank     = float(n.get("rank", 0.0))
-        is_seed  = bool(n.get("isSeed", False))
-
-        id2name[nid] = name
-        id2lbls[nid] = labels
-
-        node_lines.append(
-            f'NODE {i+1} [{labels}] name="{name}" '
-            f'degree={degree} rank={rank} isSeed={is_seed}\n'
-            f'desc="{desc}"'
+        text_nodes.append(
+            f"{labels}: {name}"
+            f" (rank={rank})"
+            f"\n- {desc}"
         )
+        id2name[nid] = name
+        id2label[nid] = labels
 
-    rel_lines = []
+    text_rels = []
     for r in rels:
-        start_id    = r["start"]
-        end_id      = r["end"]
-        start_name  = id2name.get(start_id, f'NODE({start_id})')
-        end_name    = id2name.get(end_id,   f'NODE({end_id})')
+        # rid         = r["id"]
         rtype       = r["type"]
-        # edge_degree = r.get("edge_degree", 0)
-        # rrank       = float(r.get("rank", 0.0))
+        start_name  = id2name[r["start"]]
+        end_name    = id2name[r["end"]]
+        rdesc       = clean_text(r["description"])
+        rrank       = float(r["rank"])
 
-        rel_lines.append(
-            f'{start_name} -[{rtype}]-> {end_name}'
-            # f'\n(rank={rrank})'
+        text_rels.append(
+            f"{start_name} -[{rtype}]-> {end_name}"
+            f' (rank={rrank})'
+            f"\n- {rdesc}"
         )
 
     text_context = (
-        "GRAPH NODES:\n\n" + "\n\n".join(node_lines) +
-        "\n\nGRAPH RELATIONSHIPS:\n\n" + "\n".join(rel_lines)
+        "GRAPH NODES:\n" + "\n".join(text_nodes) +
+        "\n\nGRAPH RELATIONSHIPS:\n" + "\n".join(text_rels)
     )
-
-    graph_payload = {"nodes": nodes, "relationships": rels}
 
     return RetrieverResultItem(
         content=text_context,
-        metadata={
-            "type": "graph",
-            "node_count": len(nodes),
-            "rel_count": len(rels),
-            "graph": graph_payload,
-        },
+        # metadata={
+        #     "node_count": len(nodes),
+        #     "rel_count": len(rels),
+        #     "nodes": nodes,
+        #     "relations": rels,
+        # },
     )
 
 
-# ---------------- IMG TO GRAPH/TEXT ----------------
-# def img2graph(llm: OpenAILLM, image_path: str) -> None:
-#     content = [
-#         {
-#             "type": "text",
-#             "text": IMG2GRAPH_PROMPT,
-#         },
-#         {
-#             "type": "image_url",
-#             "image_url": {"url": image_path},
-#             # "image_url": {"url": encode_image(image_path)},
-#         },
-#     ]
-#     result = llm.invoke(content)
-#     return result.content
-
-def img2text(llm: OpenAILLM, image_path: str) -> None:
+# ---------------- IMG TO CAPTION ----------------
+def img2caption(llm: OpenAI, model: str, image_path: str) -> str:
     content = [
         {
             "type": "text",
-            "text": IMG2TEXT_PROMPT,
-        },
-        {
-            "type": "image_url",
-            "image_url": {"url": image_path},
-            # "image_url": {"url": encode_image(image_path)},
-        },
-    ]
-    result = llm.invoke(content)
-    return result.content
-
-
-# ---------------- RETRIEVAL & GENERATION ----------------
-def retrieve_context(retriever, labels, query, query_emb, top_k=1, per_seed_limit=10):
-    results = retriever.search(
-        query_text=query,
-        top_k=top_k,
-        query_params={
-            "allowedNodeLabels": labels,
-            "lambda": 0.5,                      # similarity vs. seed score
-            "hop_decay": 1.0,                   # 1.0 disables decay; 0.6–0.85 favors closer hops
-            "per_seed_limit": per_seed_limit,   # limit kept paths per seed
-            "q_embed": query_emb,               # query embedding
-        },
-    )
-    return [item.content for item in results.items]
-
-# With IMG2GRAPH
-# def generate_response(llm: OpenAILLM, embedder: OpenAIEmbeddings, retriever: VectorCypherRetriever, labels: List[str], query: str, image_path: str) -> str:
-#     g1 = img2graph(llm, image_path)
-#     # print("\G1:\n", g1)
-
-#     r_query = f"CONTEXT: {g1}\n\nQUERY: {query}"
-#     r_query_emb = embedder.embed_query(r_query)
-#     context = retrieve_context(retriever, labels, r_query, r_query_emb)
-#     g2 = "\n".join(item for item in context)
-#     # print("\G2:\n", g2)
-    
-#     g3 = g1 + "\n" + g2
-#     content = [
-#         {
-#             "type": "text",
-#             "text": f"Context:\n{g3}\n\nQuestion:\n{query}\n\nAnswer:",
-#         },
-#         {
-#             "type": "image_url",
-#             "image_url": {"url": encode_image(image_path)},
-#         },
-#     ]
-#     result = llm.chat.completions.create(
-#         messages=[
-#             {"role": "system", "content": SYSTEM_PROMPT},
-#             {"role": "user", "content": content},
-#         ],
-#     )
-#     response = result.choices[0].message.content.strip()
-#     save_history([
-#         {"role": "user", "content": content},
-#         {"role": "assistant", "content": response},
-#     ])
-#     return response
-
-# With IMG2TEXT
-def generate_response(inference_llm: OpenAILLM, caption_llm: OpenAILLM, embedder: OpenAIEmbeddings, retriever: VectorCypherRetriever, labels: List[str], query: str, image_path: str) -> str:
-    caption = img2text(caption_llm, image_path)
-    # print("\Caption:\n", caption)
-
-    r_query = f"Context: {caption}\n\nQuery: {query}"
-    r_query_emb = embedder.embed_query(r_query)
-    context = retrieve_context(retriever, labels, r_query, r_query_emb)
-    context_graph = "\n".join(item for item in context)
-    # print("\Retrieved:\n", retrieved_graph)
-
-    content = [
-        {
-            "type": "text",
-            "text": f"Context:\n{context_graph}\n\nQuery:\n{query}\n\nAnswer:",
+            "text": "Generate a factual caption for the following painting based on the visual content.",
         },
         {
             "type": "image_url",
             "image_url": {"url": encode_image(image_path)},
         },
     ]
-    result = inference_llm.chat.completions.create(
+    result = llm.chat.completions.create(
+        model=model,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": IMG2TEXT_PROMPT},
+            {"role": "user", "content": content},
+        ],
+    )
+    return result.choices[0].message.content.strip()
+
+
+# ---------------- RETRIEVAL & GENERATION ----------------
+def retrieve_context(retriever: VectorCypherRetriever, query: str, query_emb: list[float], top_k: int=1, per_seed_limit: int=10) -> list[str]:
+    results = retriever.search(
+        query_text=query,
+        top_k=top_k,
+        query_params={
+            "lambda": 0.5,                      # similarity vs. seed score
+            "per_seed_limit": per_seed_limit,   # limit kept paths per seed
+            "q_embed": query_emb,               # query embedding
+        },
+    )
+    # print(f"Retrieved {len(results.items)} context items.")
+    return [item.content for item in results.items]
+
+def generate_response(llm: OpenAI, gen_model: str, cap_model: str, embedder: OpenAIEmbeddings, retriever: VectorCypherRetriever, query: str, image_path: str) -> Tuple[str, List[str], str]:
+    caption = img2caption(llm, cap_model, image_path)
+    # print("Caption:\n", caption)
+
+    r_query = f"Context: {caption}\n\nQuery: {query}"
+    r_query_emb = embedder.embed_query(r_query)
+    context_list = retrieve_context(retriever, r_query, r_query_emb)
+    context_text = "\n\n".join(item for item in context_list)
+    # print("Retrieved:\n", context_text)
+
+    content = [
+        {
+            "type": "text",
+            "text": f"Context:\n{context_text}\n\nQuery:\n{query}\n\nAnswer:",
+        },
+        {
+            "type": "image_url",
+            "image_url": {"url": encode_image(image_path)},
+        },
+    ]
+    result = llm.chat.completions.create(
+        model=gen_model,
+        messages=[
+            {"role": "system", "content": GENERATION_PROMPT},
             {"role": "user", "content": content},
         ],
     )
     response = result.choices[0].message.content.strip()
-    save_history([
-        {"role": "user", "content": content},
-        {"role": "assistant", "content": response},
-    ])
-    return response
+    return (response, context_list, caption)
 
 
 # ---------------- UTILS ----------------
@@ -217,11 +160,3 @@ def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as img_file:
         img_str = base64.b64encode(img_file.read()).decode("utf-8")
         return f"data:image/png;base64,{img_str}"
-
-def save_history(history: List[Dict]=[]) -> None:
-    folder = "./chat_logs"
-    os.makedirs(folder, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d")
-    filename = os.path.join(folder, f"{timestamp}.json")
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)

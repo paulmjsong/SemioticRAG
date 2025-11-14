@@ -19,39 +19,49 @@ Return format example:
 }
 """
 
-# TODO: IMG2TEXT PROMPT
 IMG2TEXT_PROMPT = """
-You are an expert in image captioning with a focus on art history.
-Analyze the given image and provide a detailed caption that highlights the key visual elements, styles, and cultural significance depicted in the artwork.
-Your caption should be informative and suitable for use in an academic context.
+You are an expert visual analyst trained to describe the key subjects, objects, and features depicted in artworks and paintings.
+Your goal is to generate a concise but information-rich caption that enables accurate semantic retrieval of related context (e.g., art history, symbolism, or artist background) in a RAG system.
+
+Instructions:
+Given an input image of a painting:
+1. Identify the primary subjects (people, animals, landscapes, buildings, objects, etc.).
+2. Describe relevant visual features that provide contextual clues (e.g., setting, posture, clothing, activity, symbols, colors, or props).
+3. Avoid subjective interpretation (e.g., “beautiful,” “sad,” “mysterious”) or stylistic commentary (e.g., “Impressionist style”).
+4. Focus on factual, observable content only.
+5. Write the caption in 1-3 sentences or under 50 words.
+
+Example 1:
+Input: Painting of a woman sitting near a window with a cat on her lap.
+Output:
+A woman in a long dress sits beside a window holding a cat on her lap, with light entering from the left.
+
+
+Example 2:
+Input: Painting showing several soldiers crossing a river with a flag.
+Output:
+A group of soldiers cross a river in a boat, one raising a flag while others row through icy waters.
 """
 
 RETRIEVAL_CYPHER = """
 WITH node, score
-MATCH p = (node)__PATTERN__(nbr)
-WITH node, score AS seedScore, p, nbr, length(p) AS hops
-
-// Hop decay
-WITH node, seedScore, p, nbr, hops,
-     CASE
-       WHEN $hop_decay IS NULL OR $hop_decay <= 0 THEN 1.0
-       ELSE exp( (hops - 1) * log( toFloat($hop_decay) ) )
-     END AS hop_w,
-     toFloat($lambda) AS lambda
+MATCH p = __PATTERN__
+WITH node, score AS seedScore, p, nbr,
+     toFloat($lambda) AS lambda,
+     coalesce($q_embed, []) AS qv
 
 // Text similarity for endpoint nbr
-WITH node, seedScore, p, nbr, hop_w, lambda, coalesce($q_embed, []) AS qv
-WITH node, seedScore, p, nbr, hop_w, lambda, qv,
+WITH node, seedScore, p, nbr, lambda, qv,
      // dot(qv, nbr.embedding), ||qv||, ||nbr.embedding||
      reduce(d=0.0, i IN range(0, size(qv)-1) | d + coalesce(qv[i],0.0) * coalesce(nbr.embedding[i],0.0)) AS dotN,
      sqrt(reduce(s=0.0, i IN range(0, size(qv)-1) | s + coalesce(qv[i],0.0)^2)) AS normQ,
      sqrt(reduce(s=0.0, i IN range(0, size(coalesce(nbr.embedding,[]))-1) | s + coalesce(nbr.embedding[i],0.0)^2)) AS normN
-WITH node, seedScore, p, nbr, hop_w, lambda,
+WITH node, seedScore, p, nbr, lambda,
      CASE WHEN normQ = 0 OR normN = 0 THEN 0.0 ELSE dotN / (normQ * normN) END AS textSim
 
 // Per-path node rank
 WITH node, p, nbr,
-     hop_w * ( lambda * seedScore + (1 - lambda) * toFloat(textSim) ) AS nodeRank
+     lambda * seedScore + (1 - lambda) * toFloat(textSim) AS nodeRank
 ORDER BY nodeRank DESC
 
 // Keep top paths per seed
@@ -99,17 +109,13 @@ WITH node, nodeRankList, relRankList, allNodes, collect(DISTINCT r) AS allRels
 // Build nodes with best rank lookup
 UNWIND allNodes AS n
 WITH node, nodeRankList, relRankList, allRels, n,
-     COUNT { (n)--() } AS deg_n,
      coalesce( head([m IN nodeRankList WHERE m.nid = elementId(n) | m.rank]), 0.0 ) AS bestNodeRank
-WITH
-     collect({
+WITH collect({
        id: elementId(n),
        labels: labels(n),
        name: coalesce(n.name, "(unnamed)"),
        description: coalesce(n.description, ""),
-       degree: deg_n,
-       rank: CASE WHEN n = node AND bestNodeRank < 1.0 THEN 1.0 ELSE bestNodeRank END,
-       isSeed: n = node
+       rank: CASE WHEN n = node AND bestNodeRank < 1.0 THEN 1.0 ELSE bestNodeRank END
      }) AS nodes, allRels, relRankList
 
 // Build relationships with best rank lookup
@@ -137,7 +143,7 @@ ORDER BY r.rank DESC
 RETURN nodes, collect(r) AS rels
 """
 
-SYSTEM_PROMPT = (
+GENERATION_PROMPT = (
   # "You are an expert in Korean art history. "
   # "Rely ONLY on the provided subgraph facts. "
   # "Cite entities by their names as shown in the node lines. "

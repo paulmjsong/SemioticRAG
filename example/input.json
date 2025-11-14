@@ -2,19 +2,22 @@
     {
         "image": "example/paintings/담배피우는호랑이.png",
         "query": [
-            "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?"
+            "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
+            "What are the main elements depicted in this traditional Korean folk painting, and what are the symbolic meanings of each?"
         ]
     },
     {
         "image": "example/paintings/일월오봉도.webp",
         "query": [
-            "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?"
+            "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
+            "What are the main elements depicted in this traditional Korean folk painting, and what are the symbolic meanings of each?"
         ]
     },
     {
         "image": "example/paintings/작호도.jpg",
         "query": [
-            "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?"
+            "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
+            "What are the main elements depicted in this traditional Korean folk painting, and what are the symbolic meanings of each?"
         ]
     }
 ]

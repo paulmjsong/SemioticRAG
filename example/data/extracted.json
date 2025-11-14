@@ -83,6 +83,12 @@
             "description": "A representation of Dangun, a legendary figure in Korean history, connecting to cultural narratives."
         },
         {
+            "type": "Concept",
+            "name": "Protection Against Evil Spirits",
+            "aliases": [],
+            "description": "The cultural belief that certain images or practices can ward off evil, rooted in ancient traditions of using protective symbols."
+        },
+        {
             "type": "Myth",
             "name": "Protection Against Evil Spirits",
             "aliases": [],
