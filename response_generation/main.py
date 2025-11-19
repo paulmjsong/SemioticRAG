@@ -28,12 +28,6 @@ CAP_MODEL = "gpt-4o-mini"
 GEN_MODEL = "gpt-4o"
 
 
-# ---------------- UTIL ----------------
-def close_driver(driver: Driver) -> None:
-    if driver is not None:
-        driver.close()
-
-
 # ---------------- MAIN ----------------
 def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
@@ -53,8 +47,11 @@ def main():
     with open(src_path, "r", encoding="utf-8") as src_file:
         all_input = json.load(src_file)
         all_output = []
+    
+    total_generations = sum(len(input["query"]) for input in all_input) * 2
+    pbar = tqdm(total=total_generations, desc="Processing generations")
 
-    for input in tqdm(all_input, total=len(all_input), desc="Processing inputs"):
+    for input in all_input:
         img_path = input["image"]
         qa_pairs = []
 
@@ -62,10 +59,10 @@ def main():
             for i in range(2):
                 start_time = time.time()
                 if i == 0:
-                    # with retrieval
+                    pbar.set_postfix_str("with retrieval")
                     response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, embedder, retriever)
                 else:
-                    # without retrieval
+                    pbar.set_postfix_str("without retrieval")
                     response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, embedder, None)
                 elapsed_time = time.time() - start_time
 
@@ -76,16 +73,18 @@ def main():
                     "retrieved": retrieved,
                     "time": elapsed_time,
                 })
+                pbar.update(1)
         
         all_output.append({
             "image": img_path,
             "output": qa_pairs,
         })
     
+    pbar.close()
+    driver.close()
+    
     with open(dst_path, "w", encoding="utf-8") as dst_file:
         json.dump(all_output, dst_file, ensure_ascii=False, indent=4)
-    
-    close_driver(driver)
 
 
 if __name__ == "__main__":

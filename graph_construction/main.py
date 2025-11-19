@@ -26,12 +26,6 @@ EMBED_DIMS = 3072
 GENERATION_MODEL = "gpt-4o"
 
 
-# ---------------- UTIL ----------------
-def close_driver(driver: Driver) -> None:
-    if driver is not None:
-        driver.close()
-
-
 # ---------------- MAIN ----------------
 def main():
     src_path = "example/data/fetched.json"
@@ -49,7 +43,7 @@ def main():
     # clear_database(driver)
     build_database(driver, dst_path, embedder, EMBED_DIMS, SEED_LABEL, INDEX_NAME)
 
-    close_driver(driver)
+    driver.close()
 
 
 if __name__ == "__main__":
