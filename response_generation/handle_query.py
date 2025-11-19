@@ -12,7 +12,7 @@ from neo4j_graphrag.types import RetrieverResultItem
 from prompts import IMG2GRAPH_PROMPT, IMG2TEXT_PROMPT, RETRIEVAL_CYPHER, GENERATION_PROMPT
 
 
-# ---------------- CREATE RETRIEVER ----------------
+# ---------------- RETRIEVER ----------------
 def create_retriever(driver: GraphDatabase.driver, embedder: OpenAIEmbeddings, seed_label: str, index_name: str) -> VectorCypherRetriever:
     return VectorCypherRetriever(
         driver=driver,
@@ -29,7 +29,6 @@ def build_retriever_query(seed_label: str, directed: bool=True) -> str:
     # Use a marker __PATTERN__ we replace below (avoid f-strings to keep { } intact)
     cypher = RETRIEVAL_CYPHER
     return cypher.replace("__PATTERN__", pattern)
-
 
 def formatter(rec: Record) -> RetrieverResultItem:
     def clean_text(s):
@@ -87,6 +86,19 @@ def formatter(rec: Record) -> RetrieverResultItem:
         # },
     )
 
+def retrieve_context(retriever: VectorCypherRetriever, query: str, query_emb: list[float], top_k: int=5, per_seed_limit: int=10) -> list[str]:
+    results = retriever.search(
+        query_text=query,
+        top_k=top_k,
+        query_params={
+            "lambda": 0.5,                      # similarity vs. seed score
+            "per_seed_limit": per_seed_limit,   # limit kept paths per seed
+            "q_embed": query_emb,               # query embedding
+        },
+    )
+    # print(f"Retrieved {len(results.items)} context items.")
+    return [item.content for item in results.items]
+
 
 # ---------------- IMG TO CAPTION ----------------
 def img2caption(llm: OpenAI, model: str, image_path: str) -> str:
@@ -110,35 +122,29 @@ def img2caption(llm: OpenAI, model: str, image_path: str) -> str:
     return result.choices[0].message.content.strip()
 
 
-# ---------------- RETRIEVAL & GENERATION ----------------
-def retrieve_context(retriever: VectorCypherRetriever, query: str, query_emb: list[float], top_k: int=5, per_seed_limit: int=10) -> list[str]:
-    results = retriever.search(
-        query_text=query,
-        top_k=top_k,
-        query_params={
-            "lambda": 0.5,                      # similarity vs. seed score
-            "per_seed_limit": per_seed_limit,   # limit kept paths per seed
-            "q_embed": query_emb,               # query embedding
-        },
-    )
-    # print(f"Retrieved {len(results.items)} context items.")
-    return [item.content for item in results.items]
-
-def generate_response(llm: OpenAI, gen_model: str, cap_model: str, embedder: OpenAIEmbeddings, retriever: VectorCypherRetriever, query: str, image_path: str) -> Tuple[str, List[str], str]:
+# ---------------- GENERATION ----------------
+def generate_response(query: str, image_path: str, llm: OpenAI, gen_model: str, cap_model: str, embedder: OpenAIEmbeddings, retriever: VectorCypherRetriever=None) -> Tuple[str, List[str], str]:
     caption = img2caption(llm, cap_model, image_path)
     # print("Caption:\n", caption)
 
-    # r_query = f"Context: {caption}\n\nQuery: {query}"
-    # r_query_emb = embedder.embed_query(r_query)
-    caption_emb = embedder.embed_query(caption)
-    context_list = retrieve_context(retriever, caption, caption_emb)
-    context_text = "\n\n".join(item for item in context_list)
-    # print("Retrieved:\n", context_text)
+    if retriever is None:
+        context_list = []
+        text = f"Query:\n{query}\n\nAnswer:"
+    else:
+        # r_query = f"Context: {caption}\n\nQuery: {query}"
+        # r_query_emb = embedder.embed_query(r_query)
+        caption_emb = embedder.embed_query(caption)
+
+        context_list = retrieve_context(retriever, caption, caption_emb)
+        context_text = "\n\n".join(item for item in context_list)
+        # print("Retrieved:\n", context_text)
+
+        text = f"Context:\n{context_text}\n\nQuery:\n{query}\n\nAnswer:"
 
     content = [
         {
             "type": "text",
-            "text": f"Context:\n{context_text}\n\nQuery:\n{query}\n\nAnswer:",
+            "text": text,
         },
         {
             "type": "image_url",
@@ -151,6 +157,7 @@ def generate_response(llm: OpenAI, gen_model: str, cap_model: str, embedder: Ope
             {"role": "system", "content": GENERATION_PROMPT},
             {"role": "user", "content": content},
         ],
+        max_tokens=100,
     )
     response = result.choices[0].message.content.strip()
     return (response, context_list, caption)

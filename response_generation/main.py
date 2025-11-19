@@ -59,17 +59,23 @@ def main():
         qa_pairs = []
 
         for query in input["query"]:
-            start_time = time.time()
-            response, retrieved, caption = generate_response(llm, GEN_MODEL, CAP_MODEL, embedder, retriever, query, img_path)
-            elapsed_time = time.time() - start_time
+            for i in range(2):
+                start_time = time.time()
+                if i == 0:
+                    # with retrieval
+                    response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, embedder, retriever)
+                else:
+                    # without retrieval
+                    response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, embedder, None)
+                elapsed_time = time.time() - start_time
 
-            qa_pairs.append({
-                "query": query,
-                "caption": caption,
-                "response": response,
-                "retrieved": retrieved,
-                "time": elapsed_time,
-            })
+                qa_pairs.append({
+                    "query": query,
+                    "caption": caption,
+                    "response": response,
+                    "retrieved": retrieved,
+                    "time": elapsed_time,
+                })
         
         all_output.append({
             "image": img_path,
