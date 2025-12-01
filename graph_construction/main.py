@@ -1,12 +1,12 @@
 import os
 from dotenv import load_dotenv
 
-from neo4j import Driver, GraphDatabase
+from neo4j import GraphDatabase
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
 from neo4j_graphrag.llm import OpenAILLM
 
 from extract_entities import extract_data
-from construct_database import clear_database, build_database
+from manage_database import clear_database, add_to_database
 
 
 # ---------------- CONFIG ----------------
@@ -41,7 +41,7 @@ def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     embedder = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
     # clear_database(driver)
-    build_database(driver, dst_path, embedder, EMBED_DIMS, SEED_LABEL, INDEX_NAME)
+    add_to_database(driver, dst_path, embedder, EMBED_DIMS, SEED_LABEL, INDEX_NAME)
 
     driver.close()
 

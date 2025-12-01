@@ -13,7 +13,7 @@ from neo4j_graphrag.experimental.components.resolver import (
 
 
 # ---------------- ADD ENTITIES TO DB ----------------
-def build_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_dims: int, seed_label: str, index_name: str) -> None:
+def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_dims: int, seed_label: str, index_name: str) -> None:
     with open(dst_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     
