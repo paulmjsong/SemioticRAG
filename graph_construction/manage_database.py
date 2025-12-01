@@ -13,11 +13,11 @@ from neo4j_graphrag.experimental.components.resolver import (
 
 
 # ---------------- ADD ENTITIES TO DB ----------------
-def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_dims: int, seed_label: str, index_name: str) -> None:
+def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_dims: int, index_name: str) -> None:
     with open(dst_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     
-    ensure_vector_index(driver, embed_dims, seed_label, index_name)
+    ensure_vector_index(driver, embed_dims, index_name)
     
     node_ids: List[str] = []
     node_embeds: List[List[float]] = []
@@ -56,11 +56,11 @@ def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_di
 
 
 # ---------------- NEO4J OPERATIONS ----------------
-def ensure_vector_index(driver: Driver, embed_dims: int, seed_label: str, index_name: str) -> None:
+def ensure_vector_index(driver: Driver, embed_dims: int, index_name: str) -> None:
     create_vector_index(
         driver=driver,
         name=index_name,
-        label=seed_label,
+        label="Form",
         embedding_property="embedding",
         dimensions=embed_dims,
         similarity_fn="cosine",

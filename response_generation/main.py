@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from tqdm import tqdm
 
-from neo4j import Driver, GraphDatabase
+from neo4j import GraphDatabase
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
 # from neo4j_graphrag.llm import OpenAILLM
 
@@ -20,7 +20,6 @@ URI = os.getenv("NEO4J_URI")
 AUTH = (os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))
 
 INDEX_NAME = "Index"
-SEED_LABEL = "Form"
 
 EMBED_MODEL = "text-embedding-3-large"
 EMBED_DIMS = 3072
@@ -32,7 +31,7 @@ GEN_MODEL = "gpt-4o"
 def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     embedder = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
-    retriever = create_retriever(driver, embedder, SEED_LABEL, INDEX_NAME)
+    retriever = create_retriever(driver, embedder, INDEX_NAME)
     
     # TODO: replace caption model with LLAVA
     llm = OpenAI(api_key=OPENAI_API_KEY)
@@ -56,14 +55,14 @@ def main():
         qa_pairs = []
 
         for query in input["query"]:
-            for i in range(2):
+            for i in range(2):  # with and without retrieval
                 start_time = time.time()
                 if i == 0:
                     pbar.set_postfix_str("with retrieval")
-                    response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, embedder, retriever)
+                    response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, retriever)
                 else:
                     pbar.set_postfix_str("without retrieval")
-                    response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, embedder, None)
+                    response, retrieved, caption = generate_response(query, img_path, llm, GEN_MODEL, CAP_MODEL, None)
                 elapsed_time = time.time() - start_time
 
                 qa_pairs.append({

@@ -19,7 +19,6 @@ URI = os.getenv("NEO4J_URI")
 AUTH = (os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))
 
 INDEX_NAME = "Index"
-SEED_LABEL = "Form"
 
 EMBED_MODEL = "text-embedding-3-large"
 EMBED_DIMS = 3072
@@ -41,7 +40,7 @@ def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     embedder = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
     # clear_database(driver)
-    add_to_database(driver, dst_path, embedder, EMBED_DIMS, SEED_LABEL, INDEX_NAME)
+    add_to_database(driver, dst_path, embedder, EMBED_DIMS, INDEX_NAME)
 
     driver.close()
 
