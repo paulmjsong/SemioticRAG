@@ -4,10 +4,11 @@ from typing import Dict, List, Tuple
 
 from neo4j import GraphDatabase, Record
 from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
+from neo4j_graphrag.generation.prompts import PromptTemplate
 from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.types import RetrieverResultItem
 
-from prompts import CAP_SYSTEM_PROMPT, CAP_USER_PROMPT, RETRIEVAL_CYPHER, GEN_SYSTEM_PROMPT
+from prompts import CAP_SYSTEM_PROMPT, CAP_USER_PROMPT, RETRIEVAL_CYPHER, GEN_SYSTEM_PROMPT, GEN_USER_PROMPT
 
 
 # ---------------- RETRIEVER ----------------
@@ -26,38 +27,48 @@ def formatter(rec: Record) -> RetrieverResultItem:
 
     nodes = rec["nodes"]
     rels  = rec["rels"]
-    id2name, id2label = {}, {}
+    id2name, id2type = {}, {}
 
     text_nodes = []
     for n in nodes:
         nid     = n["id"]
-        labels  = "/".join(n["labels"])
-        name    = n["name"]
-        desc    = clean_text(n["description"])
+        ntype   = n["labels"][-1]
+        nname   = n["name"]
+        ndesc   = clean_text(n["description"])
 
-        text_nodes.append(
-            f"{labels}: {name}"
-            f"\n- {desc}"
-        )
-        id2name[nid] = name
-        id2label[nid] = labels
+        text_nodes.append(f"{ntype}: {nname}\n- {ndesc}")
+        # text_nodes.append({
+        #     "type": ntype,
+        #     "name": nname,
+        #     "description": ndesc,
+        # })
+
+        id2name[nid] = nname
+        id2type[nid] = ntype
 
     text_rels = []
     for r in rels:
         rtype       = r["type"]
-        start_node  = id2name[r["start"]]
-        end_node    = id2name[r["end"]]
+        src_node    = id2name[r["start"]]
+        tgt_node    = id2name[r["end"]]
         rdesc       = clean_text(r["description"])
 
-        text_rels.append(
-            f"{start_node} -[{rtype}]-> {end_node}"
-            f"\n- {rdesc}"
-        )
+        text_rels.append(f"{src_node} -[{rtype}]-> {tgt_node}\n- {rdesc}")
+        # text_rels.append({
+        #     "type": rtype,
+        #     "source": src_node,
+        #     "target": tgt_node,
+        #     "description": rdesc,
+        # })
 
     text_context = (
-        "GRAPH NODES:\n" + "\n".join(text_nodes) +
-        "\n\nGRAPH RELATIONSHIPS:\n" + "\n".join(text_rels)
+        "NODES:\n" + "\n".join(text_nodes) +
+        "\n\nRELATIONSHIPS:\n" + "\n".join(text_rels)
     )
+    # text_context = str({
+    #     "nodes": text_nodes,
+    #     "relationships": text_rels,
+    # })
 
     return RetrieverResultItem(text_context)
 
@@ -91,16 +102,20 @@ def img2caption(llm: OpenAI, model: str, image_path: str) -> str:
 
 # ---------------- GENERATION ----------------
 def generate_response(query: str, image_path: str, llm: OpenAI, gen_model: str, cap_model: str, retriever: VectorCypherRetriever=None) -> Tuple[str, List[str], str]:
-    caption = ""
-    context_list = []
-    text = f"Query:\n{query}\n\nAnswer:"
+    prompt = PromptTemplate(
+        template=GEN_USER_PROMPT,
+        expected_inputs=["context", "query"],
+    )
 
-    if retriever is not None:
+    if retriever is None:
+        caption = ""
+        context_list = []
+    else:
         caption = img2caption(llm, cap_model, image_path)
         context_list = retrieve_context(retriever, caption)
-        context_text = "\n\n".join(item for item in context_list)
-        # print("Retrieved:\n", context_text)
-        text = f"Context:\n{context_text}\n\nQuery:\n{query}\n\nAnswer:"
+    
+    context_text = "\n\n".join(item for item in context_list)
+    text = prompt.format(context=context_text, query=query)
 
     content = [
         {"type": "text", "text": text},

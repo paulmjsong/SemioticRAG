@@ -69,3 +69,13 @@ Your explanation should:
 
 Your goal is to produce a culturally grounded, well-reasoned interpretation that reads like an art-historical commentary, not a symbolic glossary.
 """
+
+GEN_USER_PROMPT = """
+Context:
+{context}
+
+Query:
+{query}
+
+Answer:
+"""

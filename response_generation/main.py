@@ -14,27 +14,27 @@ from handle_query import create_retriever, generate_response
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-
-# ---------------- NEO4J SETUP ----------------
-URI = os.getenv("NEO4J_URI")
-AUTH = (os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))
-
-INDEX_NAME = "Index"
-
 EMBED_MODEL = "text-embedding-3-large"
 EMBED_DIMS = 3072
 CAP_MODEL = "gpt-4o-mini"
 GEN_MODEL = "gpt-4o"
 
 
+# ---------------- NEO4J SETUP ----------------
+URI = os.getenv("NEO4J_URI")
+AUTH = (os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))
+INDEX = "index"
+
+
 # ---------------- MAIN ----------------
 def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     embedder = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
-    retriever = create_retriever(driver, embedder, INDEX_NAME)
+    retriever = create_retriever(driver, embedder, INDEX)
     
-    # TODO: replace caption model with LLAVA
+    # TODO: REPLACE MODELS WITH LLAVA OR QWEN
     llm = OpenAI(api_key=OPENAI_API_KEY)
+    # END TODO
     
     src_path = "example/input.json"
     dst_path = "example/output.json"

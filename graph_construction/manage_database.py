@@ -19,40 +19,40 @@ def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_di
     
     ensure_vector_index(driver, embed_dims, index_name)
     
-    node_ids: List[str] = []
-    node_embeds: List[List[float]] = []
+    form_ids: List[str] = []
+    form_embeds: List[List[float]] = []
     
     with driver.session() as session:
         # Upsert nodes
         for entity in tqdm(data["entities"], total=len(data["entities"]), desc="⬆️  Upserting entities"):
             node_id = session.execute_write(create_node, entity)
-            node_ids.append(node_id)
+            if node_id and entity["type"] == "Form":
+                form_ids.append(node_id)
 
-            embed_text = f"Name: {entity['name']} | Description: {entity['description']}"
+            embed_text = entity['name']
             if entity.get("aliases"):
-                embed_text += f" | Aliases: {', '.join(entity['aliases'])}"
-            node_embeds.append(embedder.embed_query(embed_text))
+                embed_text += ". " + ". ".join(entity['aliases'])
+            embed_text += ". " + entity['description']
+            form_embeds.append(embedder.embed_query(embed_text))
         
-        # Batch upsert node embeddings
-        if node_ids:
+        # Batch upsert vectors for Forms
+        if form_ids:
             upsert_vectors(
                 driver=driver,
-                ids=node_ids,
+                ids=form_ids,
                 embedding_property="embedding",
-                embeddings=node_embeds,
+                embeddings=form_embeds,
                 entity_type=EntityType.NODE,
             )
         
         # Upsert edges
         for rel in tqdm(data["relations"], total=len(data["relations"]), desc="⬆️  Upserting relationships"):
             joint_node_id = session.execute_write(create_edges, rel)
-            if joint_node_id:
-                node_ids.extend(joint_node_id)
     
     print("🔍 Resolving duplicate entities...")
     asyncio.run(resolve_duplicates(driver))
     
-    print("✅ Graph built, single vector index populated, and deduplicated.")
+    print("✅ Database population complete.")
 
 
 # ---------------- NEO4J OPERATIONS ----------------
@@ -139,13 +139,13 @@ def create_edges(tx, rel: Dict) -> Optional[str]:
                 run_query(
                     source=sanitize_label(source),
                     source_type="Concept",
-                    target=sanitize_label(joint_concept["name"]),
+                    target=joint_concept["name"],
                     target_type="JointConcept",
                     rel_type="PART_OF",
                 )
             # Create edge from JointConcept to Myth
             run_query(
-                source=sanitize_label(joint_concept["name"]),
+                source=joint_concept["name"],
                 source_type="JointConcept",
                 target=sanitize_label(rel["target"]),
                 target_type="Myth",
