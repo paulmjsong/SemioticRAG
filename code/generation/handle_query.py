@@ -1,23 +1,19 @@
-import base64, json
-from openai import OpenAI
-from typing import Dict, List, Tuple
-
+import base64
 from neo4j import GraphDatabase, Record
-from neo4j_graphrag.embeddings.openai import OpenAIEmbeddings
 from neo4j_graphrag.generation.prompts import PromptTemplate
 from neo4j_graphrag.retrievers import VectorCypherRetriever
 from neo4j_graphrag.types import RetrieverResultItem
 
-from prompts import CAP_SYSTEM_PROMPT, CAP_USER_PROMPT, RETRIEVAL_CYPHER, GEN_SYSTEM_PROMPT, GEN_USER_PROMPT
+from utils.llm import BaseLLM, BaseEmbedder
+from utils.prompts import CAPTION_SYSTEM_PROMPT, CAPTION_USER_PROMPT, RETRIEVAL_CYPHER, GENERATE_SYSTEM_PROMPT, GENERATE_USER_PROMPT
 
 
 # ---------------- RETRIEVER ----------------
-def create_retriever(driver: GraphDatabase.driver, embedder: OpenAIEmbeddings, index_name: str) -> VectorCypherRetriever:
+def create_retriever(driver: GraphDatabase.driver, index_name: str) -> VectorCypherRetriever:
     return VectorCypherRetriever(
         driver=driver,
         index_name=index_name,
         retrieval_query=RETRIEVAL_CYPHER,
-        embedder=embedder,
         result_formatter=formatter,
     )
 
@@ -72,9 +68,9 @@ def formatter(rec: Record) -> RetrieverResultItem:
 
     return RetrieverResultItem(text_context)
 
-def retrieve_context(retriever: VectorCypherRetriever, query: str, top_k: int=5, per_seed_limit: int=10) -> list[str]:
+def retrieve_context(retriever: VectorCypherRetriever, query_vector: list[float], top_k: int=5, per_seed_limit: int=10) -> list[str]:
     results = retriever.search(
-        query_text=query,
+        query_vector=query_vector,
         top_k=top_k,
         query_params={
             "per_seed_limit": per_seed_limit,
@@ -84,52 +80,24 @@ def retrieve_context(retriever: VectorCypherRetriever, query: str, top_k: int=5,
     return [item.content for item in results.items]
 
 
-# ---------------- IMG TO CAPTION ----------------
-def img2caption(llm: OpenAI, model: str, image_path: str) -> str:
-    content = [
-        {"type": "text", "text": CAP_USER_PROMPT},
-        {"type": "image_url", "image_url": {"url": encode_image(image_path)}},
-    ]
-    result = llm.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": CAP_SYSTEM_PROMPT},
-            {"role": "user", "content": content},
-        ],
-    )
-    return result.choices[0].message.content.strip()
-
-
 # ---------------- GENERATION ----------------
-def generate_response(query: str, image_path: str, llm: OpenAI, gen_model: str, cap_model: str, retriever: VectorCypherRetriever=None) -> Tuple[str, List[str], str]:
-    prompt = PromptTemplate(
-        template=GEN_USER_PROMPT,
-        expected_inputs=["context", "query"],
-    )
-
+def generate_response(query: str, image_path: str, caption_llm: BaseLLM, generate_llm: BaseLLM, embedder: BaseEmbedder, retriever: VectorCypherRetriever=None) -> tuple[str, list[str], str]:
     if retriever is None:
         caption = ""
         context_list = []
+        context_text = ""
     else:
-        caption = img2caption(llm, cap_model, image_path)
-        context_list = retrieve_context(retriever, caption)
+        caption = caption_llm.generate(CAPTION_USER_PROMPT, CAPTION_SYSTEM_PROMPT, image_path)
+        caption_vector = embedder.embed(caption)
+        context_list = retrieve_context(retriever, caption_vector)
+        context_text = "\n\n".join(item for item in context_list)
     
-    context_text = "\n\n".join(item for item in context_list)
-    text = prompt.format(context=context_text, query=query)
+    prompt = PromptTemplate(
+        template=GENERATE_USER_PROMPT,
+        expected_inputs=["context", "query"],
+    ).format(context=context_text, query=query)
 
-    content = [
-        {"type": "text", "text": text},
-        {"type": "image_url", "image_url": {"url": encode_image(image_path)}},
-    ]
-    result = llm.chat.completions.create(
-        model=gen_model,
-        messages=[
-            {"role": "system", "content": GEN_SYSTEM_PROMPT},
-            {"role": "user", "content": content},
-        ],
-        max_tokens=100,
-    )
-    response = result.choices[0].message.content.strip()
+    response = generate_llm.generate(prompt, GENERATE_SYSTEM_PROMPT, image_path)
     return (response, context_list, caption)
 
 

@@ -1,7 +1,5 @@
 import asyncio, json, re
 from tqdm import tqdm
-from typing import Dict, List, Optional
-
 from neo4j import Driver
 from neo4j_graphrag.indexes import create_vector_index, upsert_vectors
 from neo4j_graphrag.llm import OpenAILLM
@@ -19,8 +17,8 @@ def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_di
     
     ensure_vector_index(driver, embed_dims, index_name)
     
-    form_ids: List[str] = []
-    form_embeds: List[List[float]] = []
+    form_ids: list[str] = []
+    form_embeds: list[list[float]] = []
     
     with driver.session() as session:
         # Upsert nodes
@@ -66,7 +64,7 @@ def ensure_vector_index(driver: Driver, embed_dims: int, index_name: str) -> Non
         similarity_fn="cosine",
     )
 
-def create_node(tx, entity: Dict) -> Optional[str]:
+def create_node(tx, entity: dict) -> str | None:
     entity_type = entity["type"]
     if entity_type not in {"Form", "Concept", "Myth", "JointConcept"}:
         raise ValueError(f"Unsupported entity type: {entity_type}")
@@ -85,7 +83,7 @@ def create_node(tx, entity: Dict) -> Optional[str]:
     
     return rec["eid"]
 
-def create_edges(tx, rel: Dict) -> Optional[str]:
+def create_edges(tx, rel: dict) -> str | None:
     def run_query(source: str, source_type: str, target: str, target_type: str, rel_type: str) -> None:
         query = f"""
         MATCH (a:{source_type} {{name: $source}})
