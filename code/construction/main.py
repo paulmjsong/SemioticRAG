@@ -1,4 +1,4 @@
-import os
+import argparse, os
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
 
@@ -8,46 +8,54 @@ from utils.llm import OpenAILLM, HuggingFaceLLM, OllamaLLM, LocalLLM
 from utils.llm import OpenAIEmbedder, HuggingFaceEmbedder, OllamaEmbedder, LocalEmbedder
 
 
-# ---------------- CONFIG ----------------
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# HUGGING_FACE_API_KEY = os.getenv("HUGGING_FACE_API_KEY")
-# HUGGING_FACE_BILLING_ADDRESS = os.getenv("HUGGING_FACE_BILLING_ADDRESS")
-
-EXTRACT_MODEL = "gpt-4o"
-EMBED_MODEL = "text-embedding-3-large"
-EMBED_DIMS = 3072
-
-
 # ---------------- NEO4J SETUP ----------------
+load_dotenv()
 URI = os.getenv("NEO4J_URI")
 AUTH = (os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))
 INDEX = "Index"
 
 
 # ---------------- MAIN ----------------
-def main():
-    src_path = "../example/fetched.json"
-    dst_path = "../example/extracted.json"
-    
-    if not os.path.exists(src_path):
-        print(f"❗ Source file {src_path} not found. Please provide a valid source file.")
+def main(args):
+    if not os.path.exists(args.src):
+        print(f"❗ Source file {args.src} not found. Please provide a valid source file.")
         return
     
-    # TODO: REPLACE MODELS WITH LLAVA OR QWEN
-    extract_llm = OpenAILLM(EXTRACT_MODEL)
-    # END TODO
-    
-    llm = OpenAILLM(EXTRACT_MODEL)
-    extract_data(extract_llm, src_path, dst_path)
+    match args.model:
+        case "gpt-4o-mini" | "gpt-4o":
+            extract_llm = OpenAILLM(
+                model=args.model,
+                api_key=os.getenv("OPENAI_API_KEY"),
+            )
+        case "qwen2.5":
+            extract_llm = LocalLLM(
+                model="Qwen/Qwen2.5-VL-7B-Instruct",
+            )
+        case "qwen3":
+            extract_llm = LocalLLM(
+                model="Qwen/Qwen3-4B-Instruct-2507",
+            )
+    extract_data(extract_llm, args.src, args.dst)
+
+    if args.clear == "true":
+        clear_database(driver)
 
     driver = GraphDatabase.driver(URI, auth=AUTH)
-    embedder = OpenAIEmbedder(EMBED_MODEL)
-    # clear_database(driver)
-    add_to_database(driver, dst_path, embedder, EMBED_DIMS, INDEX)
+    embedder = OpenAIEmbedder(
+        model="text-embedding-3-large",
+        model_dim=3072,
+        api_key=os.getenv("OPENAI_API_KEY"),
+    )
+    add_to_database(driver, args.dst, embedder, INDEX)
 
     driver.close()
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Data Extraction and Ingestion into Neo4j")
+    parser.add_argument("--clear", type=str, default="true", choices=["true", "false"])
+    parser.add_argument("--model", type=str, default="gpt-4o-mini", choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3"])
+    parser.add_argument("--src", type=str, default="../example/fetched.json")
+    parser.add_argument("--dst", type=str, default="../example/extracted.json")
+    args = parser.parse_args()
+    main(args)

@@ -2,20 +2,21 @@ import asyncio, json, re
 from tqdm import tqdm
 from neo4j import Driver
 from neo4j_graphrag.indexes import create_vector_index, upsert_vectors
-from neo4j_graphrag.llm import OpenAILLM
 from neo4j_graphrag.types import EntityType
 from neo4j_graphrag.experimental.components.resolver import (
     SinglePropertyExactMatchResolver,
     FuzzyMatchResolver,
 )
 
+from utils.llm import BaseEmbedder
+
 
 # ---------------- ADD ENTITIES TO DB ----------------
-def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_dims: int, index_name: str) -> None:
+def add_to_database(driver: Driver, dst_path: str, embedder: BaseEmbedder, index_name: str) -> None:
     with open(dst_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     
-    ensure_vector_index(driver, embed_dims, index_name)
+    ensure_vector_index(driver, embedder.get_dimension(), index_name)
     
     form_ids: list[str] = []
     form_embeds: list[list[float]] = []
@@ -54,13 +55,13 @@ def add_to_database(driver: Driver, dst_path: str, embedder: OpenAILLM, embed_di
 
 
 # ---------------- NEO4J OPERATIONS ----------------
-def ensure_vector_index(driver: Driver, embed_dims: int, index_name: str) -> None:
+def ensure_vector_index(driver: Driver, embed_dim: int, index_name: str) -> None:
     create_vector_index(
         driver=driver,
         name=index_name,
         label="Form",
         embedding_property="embedding",
-        dimensions=embed_dims,
+        dimensions=embed_dim,
         similarity_fn="cosine",
     )
 

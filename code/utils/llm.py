@@ -1,4 +1,4 @@
-import base64, ollama, os, torch
+import base64, ollama, torch
 from openai import OpenAI
 from huggingface_hub import InferenceClient
 from transformers import pipeline
@@ -13,13 +13,16 @@ class BaseLLM:
 class BaseEmbedder:
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError
+    
+    def get_dimension(self) -> int:
+        return self.dimension
 
 
 # ---------------- LLM WRAPPER ----------------
 class OpenAILLM(BaseLLM):
-    def __init__(self, model_name: str):
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = model_name
+    def __init__(self, model: str, api_key: str):
+        self.client = OpenAI(api_key=api_key)
+        self.model = model
 
     def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
         messages = build_messages(user_prompt, system_prompt, img_path)
@@ -30,26 +33,11 @@ class OpenAILLM(BaseLLM):
         )
         return response.choices[0].message.content.strip()
 
-class OllamaLLM:
-    def __init__(self, model_name: str):
-        self.client = ollama.Client()
-        self.model = model_name
-
-    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
-        messages = build_messages(user_prompt, system_prompt, img_path)
-        response = ollama.chat(
-            messages=messages,
-            model=self.model,
-            **kwargs,
-        )
-        return response.choices[0].message.content.strip()
-
 class HuggingFaceLLM:
-    def __init__(self, model_name: str):
-        billing_address = os.getenv("HUGGING_FACE_BILLING_ADDRESS")
+    def __init__(self, model: str, api_key: str, billing_address: str=None):
         self.client = InferenceClient(
-            model=model_name,
-            api_key=os.getenv("OPENAI_API_KEY"),
+            model=model,
+            api_key=api_key,
             headers={"X-HF-Bill-To": billing_address} if billing_address else None,
         )
 
@@ -61,11 +49,25 @@ class HuggingFaceLLM:
         )
         return response.choices[0].message.content.strip()
 
+class OllamaLLM:
+    def __init__(self, model: str):
+        self.client = ollama.Client()
+        self.model = model
+
+    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
+        messages = build_messages(user_prompt, system_prompt, img_path)
+        response = ollama.chat(
+            messages=messages,
+            model=self.model,
+            **kwargs,
+        )
+        return response.choices[0].message.content.strip()
+
 class LocalLLM:
-    def __init__(self, model_name: str):
+    def __init__(self, model: str):
         self.pipe = pipeline(
-            "image-text-to-text",
-            model=model_name,
+            task="image-text-to-text",
+            model=model,
             device="cuda" if torch.cuda.is_available() else "cpu",
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
         )
@@ -82,9 +84,10 @@ class LocalLLM:
 
 # ---------------- EMBEDDER WRAPPER ----------------
 class OpenAIEmbedder(BaseEmbedder):
-    def __init__(self, model_name: str):
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = model_name
+    def __init__(self, model: str, model_dim: int, api_key: str):
+        self.client = OpenAI(api_key=api_key)
+        self.model = model
+        self.dimension = model_dim
 
     def embed(self, text: str) -> list[float]:
         response = self.client.embeddings.create(
@@ -93,10 +96,23 @@ class OpenAIEmbedder(BaseEmbedder):
         )
         return response.data[0].embedding
 
+class HuggingFaceEmbedder(BaseEmbedder):
+    def __init__(self, model: str, model_dim: int, api_key: str, billing_address: str=None):
+        self.embedder = HuggingFaceInferenceAPIEmbeddings(
+            model_name=model,
+            api_key=api_key,
+            headers={"X-HF-Bill-To": billing_address} if billing_address else None,
+        )
+        self.dimension = model_dim
+
+    def embed(self, text: str) -> list[float]:
+        return self.embedder.embed_query(text)
+
 class OllamaEmbedder(BaseEmbedder):
-    def __init__(self, model_name: str):
+    def __init__(self, model: str, model_dim: int):
         self.client = ollama.Client()
-        self.model = model_name
+        self.model = model
+        self.dimension = model_dim
 
     def embed(self, text: str) -> list[float]:
         response = self.client.embeddings(
@@ -105,21 +121,10 @@ class OllamaEmbedder(BaseEmbedder):
         )
         return response["embedding"]
 
-class HuggingFaceEmbedder(BaseEmbedder):
-    def __init__(self, model_name: str):
-        billing_address = os.getenv("HUGGING_FACE_BILLING_ADDRESS")
-        self.embedder = HuggingFaceInferenceAPIEmbeddings(
-            model_name=model_name,
-            api_key=os.getenv("HUGGING_FACE_API_KEY"),
-            headers={"X-HF-Bill-To": billing_address} if billing_address else None,
-        )
-
-    def embed(self, text: str) -> list[float]:
-        return self.embedder.embed_query(text)
-
 class LocalEmbedder(BaseEmbedder):
-    def __init__(self, model_name: str):
-        self.embedder = HuggingFaceEmbeddings(model_name=model_name)
+    def __init__(self, model: str, model_dim: int):
+        self.embedder = HuggingFaceEmbeddings(model_name=model)
+        self.dimension = model_dim
 
     def embed(self, text: str) -> list[float]:
         return self.embedder.embed_query(text)

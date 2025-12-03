@@ -1,4 +1,4 @@
-import json, os, time
+import argparse, json, os, time
 from dotenv import load_dotenv
 from tqdm import tqdm
 from neo4j import GraphDatabase
@@ -6,13 +6,6 @@ from neo4j import GraphDatabase
 from generation.handle_query import create_retriever, generate_response
 from utils.llm import OpenAILLM, HuggingFaceLLM, OllamaLLM, LocalLLM
 from utils.llm import OpenAIEmbedder, HuggingFaceEmbedder, OllamaEmbedder, LocalEmbedder
-
-
-# ---------------- CONFIG ----------------
-EMBED_MODEL = "text-embedding-3-large"
-EMBED_DIMS = 3072
-CAPTION_MODEL = "gpt-4o-mini"
-GENERATE_MODEL = "gpt-4o"
 
 
 # ---------------- NEO4J SETUP ----------------
@@ -23,27 +16,46 @@ INDEX = "Index"
 
 
 # ---------------- MAIN ----------------
-def main():
+def main(args):
+    if not os.path.exists(args.src):
+        print(f"❗ Source file {args.src} not found. Please provide a valid source file.")
+        return
+    
     driver = GraphDatabase.driver(URI, auth=AUTH)
-    embedder = OpenAIEmbedder(EMBED_MODEL)
     retriever = create_retriever(driver, INDEX)
     if not retriever:
         print("❗ Retriever creation failed.")
         return
     
+    match args.model:
+        case "gpt-4o-mini" | "gpt-4o":
+            generate_llm = OpenAILLM(
+                model=args.model,
+                api_key=os.getenv("OPENAI_API_KEY"),
+            )
+        case "qwen2.5-vl":
+            generate_llm = LocalLLM(
+                model="Qwen/Qwen2.5-VL-7B-Instruct",
+            )
+        case "qwen3-vl":
+            generate_llm = LocalLLM(
+                model="Qwen/Qwen3-VL-8B-Instruct",
+            )
+    
     # TODO: REPLACE MODELS WITH LLAVA OR QWEN
-    caption_llm = OpenAILLM(CAPTION_MODEL)
-    generate_llm = OpenAILLM(GENERATE_MODEL)
+    caption_llm = OpenAILLM(
+        model="gpt-4o-mini",
+        api_key=os.getenv("OPENAI_API_KEY"),
+    )
     # END TODO
+
+    embedder = OpenAIEmbedder(
+        model="text-embedding-3-large",
+        model_dim=3072,
+        api_key=os.getenv("OPENAI_API_KEY"),
+    )
     
-    src_path = "../example/input.json"
-    dst_path = "../example/output.json"
-    
-    if not os.path.exists(src_path):
-        print(f"❗ Source file {src_path} not found. Please provide a valid source file.")
-        return
-    
-    with open(src_path, "r", encoding="utf-8") as src_file:
+    with open(args.src, "r", encoding="utf-8") as src_file:
         all_input = json.load(src_file)
         all_output = []
     
@@ -85,9 +97,14 @@ def main():
     pbar.close()
     driver.close()
     
-    with open(dst_path, "w", encoding="utf-8") as dst_file:
+    with open(args.dst, "w", encoding="utf-8") as dst_file:
         json.dump(all_output, dst_file, ensure_ascii=False, indent=4)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Data Extraction and Ingestion into Neo4j")
+    parser.add_argument("--model", type=str, default="gpt-4o-mini", choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3"])
+    parser.add_argument("--src", type=str, default="../example/fetched.json")
+    parser.add_argument("--dst", type=str, default="../example/extracted.json")
+    args = parser.parse_args()
+    main(args)

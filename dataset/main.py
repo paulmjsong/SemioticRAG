@@ -45,7 +45,7 @@ def get_eid_from_line(line: str, exclude: list[str]) -> str:
     tag = cells[3]
     has_img = cells[4]
     if "작품" in tag:
-        if any(keyword not in tag for keyword in exclude) and "O" in has_img:
+        if all(keyword not in tag for keyword in exclude) and "O" in has_img:
             return url.strip().split("/")[-1]
     elif "장르" in tag:
         return url.strip().split("/")[-1]
