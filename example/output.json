@@ -4,10 +4,141 @@
         "output": [
             {
                 "query": "이 그림에 묘사된 전통 한국 민화의 주요 요소들은 무엇이며, 각각의 상징적 의미는 무엇인가요?",
-                "caption": "",
-                "response": "이 그림은 전통 한국 민화에서 흔히 볼 수 있는 호랑이와 토끼의 모습을 묘사하고 있습니다. 호랑이는 대개 권위와 힘을 상징하지만, 민화에서는 종종 우스꽝스럽고 어리숙한 모습으로 등장하여 권위에 대한 풍자를 담고 있습니다. 이 그림에서 호랑이는 토끼에 의해 놀림을 당하는 듯한 사람 같은 표정을 하고 있는데, 이는 민화 특유의 유머 감각을 보여줍니다. \n\n토끼는 영리하고 교활한 동물로 묘사되며, 호랑이를 조롱하는 모습에서 그 기질이 잘 드러납니다. 또한, 토끼가 원숭이와 더불어 장수를 상징하기도 합니다. 토끼는 긴 담뱃대를 물고 있어 은유적인 상징을 더하며, 이는 인간 사회의 풍습이나 생활 방식을 비트는 장치로 볼 수 있습니다. \n\n주변의 소나무와 바위는 장수와 불변의 상징이며, 이들은 한국의 자연미를 환기시키며 그림의 배경을 구성하고 있습니다. 이러한 요소들은 모두 전통 문화를 단순히 전시하는 데 그치지 않고, 관객으로 하여금 미소 짓게 하고 생각하게 만드는 민화의 특성을 잘 보여줍니다.",
-                "retrieved": [],
-                "time": 12.439731359481812
+                "caption": "tiger, rabbit, tree, smoke pipe, pine tree, ground",
+                "response": "이 전통 한국 민화는 호랑이와 토끼를 중심으로 한 상징적 요소들을 통해 문화적 정체성과 보호의 개념을 드러냅니다. 호랑이는 힘과 보호의 상징으로, 한국 민속신앙에서 강력한 수호신으로 여겨져 악령을 물리치는 존재로 인식됩니다. 이는 호랑이가 민족과 전통의 수호자로서의 역할을 강조합니다. 토끼는 풍요와 번영을 상징하여, 생명의 성장과 다산을 나타냅니다. 이러한 동물의 조합은 교활함, 다산, 힘과 같은 개념을 함께 아우르며 사회를 지키는 수호신화로 발전합니다. 따라서 이 민화는 한국인의 문화적 유산과 믿음의 집약체로서, 민족의 영적 수호와 번영의 염원을 시각적으로 표현하고 있습니다.",
+                "retrieved": {
+                    "entities": [
+                        {
+                            "type": "Form",
+                            "name": "Tiger",
+                            "description": "The tiger is a significant figure in Korean folk art representing strength and protection against evil spirits."
+                        },
+                        {
+                            "type": "Concept",
+                            "name": "CulturalIdentity",
+                            "description": "Cultural Identity emphasizes the shared heritage and beliefs of a community, rooted in mythical and historical narratives."
+                        },
+                        {
+                            "type": "JointConcept",
+                            "name": "CulturalIdentityDivineProtection",
+                            "description": "Joint form of concepts: Cultural Identity, Divine Protection"
+                        },
+                        {
+                            "type": "Myth",
+                            "name": "SpiritualGuardianship",
+                            "description": "Spiritual Guardianship encapsulates the collective belief in supernatural beings as protectors of the nation and its values."
+                        },
+                        {
+                            "type": "Concept",
+                            "name": "Protection",
+                            "description": "This concept reflects the safeguarding and strength associated with the tiger and its representation as a guardian."
+                        },
+                        {
+                            "type": "JointConcept",
+                            "name": "AuspiciousnessProtectionWealthAndProsperity",
+                            "description": "Joint form of concepts: Auspiciousness, Protection, Wealth and Prosperity"
+                        },
+                        {
+                            "type": "Myth",
+                            "name": "CulturalSignificanceOfTheTiger",
+                            "description": "This myth encompasses the tiger's role in reflecting power, protection, and auspiciousness within Korean culture and folklore."
+                        },
+                        {
+                            "type": "Concept",
+                            "name": "Strength",
+                            "description": "Strength is a key concept conveyed by the imagery of the tiger and other powerful animals."
+                        },
+                        {
+                            "type": "JointConcept",
+                            "name": "CunningFertilityStrength",
+                            "description": "Joint form of concepts: Cunning, Fertility, Strength"
+                        },
+                        {
+                            "type": "Myth",
+                            "name": "ProtectionAgainstEvil",
+                            "description": "This myth encapsulates the belief in guardianship and resilience illustrated by the animal symbols."
+                        },
+                        {
+                            "type": "Form",
+                            "name": "Rabbit",
+                            "description": "The rabbit represents fertility and prosperity in the context of folk narratives."
+                        },
+                        {
+                            "type": "Concept",
+                            "name": "Fertility",
+                            "description": "Fertility is an important aspect signified by the rabbit in folk art, symbolizing growth."
+                        }
+                    ],
+                    "relations": [
+                        {
+                            "type": "CONNOTES",
+                            "source": "Tiger",
+                            "target": "CulturalIdentity",
+                            "description": "The form of the Tiger connotes the concept of Cultural Identity, representing strength and a connection to heritage."
+                        },
+                        {
+                            "type": "PART_OF",
+                            "source": "CulturalIdentity",
+                            "target": "CulturalIdentityDivineProtection",
+                            "description": "The combination of Cultural Identity and Divine Protection generates the myth of Spiritual Guardianship, reinforcing the belief in protectors of the nation."
+                        },
+                        {
+                            "type": "GENERATES_MYTH",
+                            "source": "CulturalIdentityDivineProtection",
+                            "target": "SpiritualGuardianship",
+                            "description": "The combination of Cultural Identity and Divine Protection generates the myth of Spiritual Guardianship, reinforcing the belief in protectors of the nation."
+                        },
+                        {
+                            "type": "CONNOTES",
+                            "source": "Tiger",
+                            "target": "Protection",
+                            "description": "The form of the tiger connotes the concept of protection through its historical role as a guardian figure."
+                        },
+                        {
+                            "type": "PART_OF",
+                            "source": "Protection",
+                            "target": "AuspiciousnessProtectionWealthAndProsperity",
+                            "description": "The concepts of auspiciousness, protection, and wealth and prosperity collectively generate the myth of the cultural significance of the tiger in Korean folklore."
+                        },
+                        {
+                            "type": "GENERATES_MYTH",
+                            "source": "AuspiciousnessProtectionWealthAndProsperity",
+                            "target": "CulturalSignificanceOfTheTiger",
+                            "description": "The concepts of auspiciousness, protection, and wealth and prosperity collectively generate the myth of the cultural significance of the tiger in Korean folklore."
+                        },
+                        {
+                            "type": "CONNOTES",
+                            "source": "Tiger",
+                            "target": "Strength",
+                            "description": "The image of the tiger connotes the concept of strength and prowess."
+                        },
+                        {
+                            "type": "PART_OF",
+                            "source": "Strength",
+                            "target": "CunningFertilityStrength",
+                            "description": "The concepts of cunning, fertility, and strength collectively generate the myth of protection against evil."
+                        },
+                        {
+                            "type": "GENERATES_MYTH",
+                            "source": "CunningFertilityStrength",
+                            "target": "ProtectionAgainstEvil",
+                            "description": "The concepts of cunning, fertility, and strength collectively generate the myth of protection against evil."
+                        },
+                        {
+                            "type": "CONNOTES",
+                            "source": "Rabbit",
+                            "target": "Fertility",
+                            "description": "The rabbit's representation connotes the concept of fertility and growth."
+                        },
+                        {
+                            "type": "PART_OF",
+                            "source": "Fertility",
+                            "target": "CunningFertilityStrength",
+                            "description": "The concepts of cunning, fertility, and strength collectively generate the myth of protection against evil."
+                        }
+                    ]
+                },
+                "time": 13.299667119979858
             }
         ]
     }

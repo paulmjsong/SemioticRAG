@@ -27,6 +27,9 @@ def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     embedder = OpenAIEmbedder(EMBED_MODEL)
     retriever = create_retriever(driver, INDEX)
+    if not retriever:
+        print("❗ Retriever creation failed.")
+        return
     
     # TODO: REPLACE MODELS WITH LLAVA OR QWEN
     caption_llm = OpenAILLM(CAPTION_MODEL)
@@ -56,17 +59,17 @@ def main():
                 start_time = time.time()
                 if i == 0:
                     pbar.set_postfix_str("with retrieval")
-                    response, retrieved, caption = generate_response(query, img_path, caption_llm, generate_llm, retriever)
+                    response, caption, context_graph = generate_response(query, img_path, caption_llm, generate_llm, embedder, retriever)
                 else:
                     pbar.set_postfix_str("without retrieval")
-                    response, retrieved, caption = generate_response(query, img_path, caption_llm, generate_llm, None)
+                    response, caption, context_graph = generate_response(query, img_path, caption_llm, generate_llm, embedder, None)
                 elapsed_time = time.time() - start_time
 
                 qa_pairs.append({
                     "query": query,
                     "caption": caption,
                     "response": response,
-                    "retrieved": retrieved,
+                    "retrieved": context_graph,
                     "time": elapsed_time,
                 })
                 pbar.update(1)

@@ -25,48 +25,39 @@ def formatter(rec: Record) -> RetrieverResultItem:
     rels  = rec["rels"]
     id2name, id2type = {}, {}
 
-    text_nodes = []
+    data = {
+        "entities": [],
+        "relations": [],
+    }
+
     for n in nodes:
         nid     = n["id"]
         ntype   = n["labels"][-1]
         nname   = n["name"]
         ndesc   = clean_text(n["description"])
 
-        text_nodes.append(f"{ntype}: {nname}\n- {ndesc}")
-        # text_nodes.append({
-        #     "type": ntype,
-        #     "name": nname,
-        #     "description": ndesc,
-        # })
-
+        data["entities"].append({
+            "type": ntype,
+            "name": nname,
+            "description": ndesc,
+        })
         id2name[nid] = nname
         id2type[nid] = ntype
 
-    text_rels = []
     for r in rels:
         rtype       = r["type"]
         src_node    = id2name[r["start"]]
         tgt_node    = id2name[r["end"]]
         rdesc       = clean_text(r["description"])
 
-        text_rels.append(f"{src_node} -[{rtype}]-> {tgt_node}\n- {rdesc}")
-        # text_rels.append({
-        #     "type": rtype,
-        #     "source": src_node,
-        #     "target": tgt_node,
-        #     "description": rdesc,
-        # })
+        data["relations"].append({
+            "type": rtype,
+            "source": src_node,
+            "target": tgt_node,
+            "description": rdesc,
+        })
 
-    text_context = (
-        "NODES:\n" + "\n".join(text_nodes) +
-        "\n\nRELATIONSHIPS:\n" + "\n".join(text_rels)
-    )
-    # text_context = str({
-    #     "nodes": text_nodes,
-    #     "relationships": text_rels,
-    # })
-
-    return RetrieverResultItem(text_context)
+    return RetrieverResultItem(content=str(data), metadata=data)
 
 def retrieve_context(retriever: VectorCypherRetriever, query_vector: list[float], top_k: int=5, per_seed_limit: int=10) -> list[str]:
     results = retriever.search(
@@ -76,29 +67,41 @@ def retrieve_context(retriever: VectorCypherRetriever, query_vector: list[float]
             "per_seed_limit": per_seed_limit,
         },
     )
-    # print(f"Retrieved {len(results.items)} context items.")
-    return [item.content for item in results.items]
+    # print(f"Retrieved {len(results.items)} items from retriever.")
+
+    combined = {
+        "entities": [],
+        "relations": [],
+    }
+    for item in results.items:
+        item_data = item.metadata
+        combined["entities"].extend(item_data.get("entities", []))
+        combined["relations"].extend(item_data.get("relations", []))
+        
+    return combined
 
 
 # ---------------- GENERATION ----------------
-def generate_response(query: str, image_path: str, caption_llm: BaseLLM, generate_llm: BaseLLM, embedder: BaseEmbedder, retriever: VectorCypherRetriever=None) -> tuple[str, list[str], str]:
+def generate_response(query: str, image_path: str, caption_llm: BaseLLM, generate_llm: BaseLLM, embedder: BaseEmbedder, retriever: VectorCypherRetriever=None) -> tuple[str, str, dict]:
     if retriever is None:
+        # print("Generating response without retrieval.")
         caption = ""
-        context_list = []
-        context_text = ""
+        context_graph = ""
     else:
+        # print("Generating response with retrieval.")
         caption = caption_llm.generate(CAPTION_USER_PROMPT, CAPTION_SYSTEM_PROMPT, image_path)
+        # print(f"Generated caption: {caption}")
         caption_vector = embedder.embed(caption)
-        context_list = retrieve_context(retriever, caption_vector)
-        context_text = "\n\n".join(item for item in context_list)
+        context_graph = retrieve_context(retriever, caption_vector)
+        # print(f"Retrieved context: {context_graph}")
     
     prompt = PromptTemplate(
         template=GENERATE_USER_PROMPT,
         expected_inputs=["context", "query"],
-    ).format(context=context_text, query=query)
+    ).format(context=str(context_graph), query=query)
 
     response = generate_llm.generate(prompt, GENERATE_SYSTEM_PROMPT, image_path)
-    return (response, context_list, caption)
+    return (response, caption, context_graph)
 
 
 # ---------------- UTILS ----------------

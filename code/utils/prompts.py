@@ -120,8 +120,8 @@ WITH node AS srcNode, score AS srcScore
 MATCH p = (srcNode:Form)-[*1..]->(tgtNode:Myth)
 
 WITH srcNode, srcScore, p,
-     length(p) AS pathLen
-     (srcScore / pathLen) AS pathRank
+     length(p) AS pathLen,
+     (srcScore / length(p)) AS pathRank
 
 ORDER BY pathRank DESC
 WITH collect(p)[..$per_seed_limit] AS topPaths
