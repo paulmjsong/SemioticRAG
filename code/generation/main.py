@@ -2,10 +2,12 @@ import argparse, json, os, time
 from dotenv import load_dotenv
 from tqdm import tqdm
 from neo4j import GraphDatabase
+from neo4j_graphrag.retrievers import VectorCypherRetriever
 
 from generation.handle_query import create_retriever, generate_response
 from utils.llm import OpenAILLM, HuggingFaceLLM, OllamaLLM, LocalLLM
 from utils.llm import OpenAIEmbedder, HuggingFaceEmbedder, OllamaEmbedder, LocalEmbedder
+from utils.utils import load_json_file
 
 
 # ---------------- NEO4J SETUP ----------------
@@ -17,30 +19,23 @@ INDEX = "Index"
 
 # ---------------- MAIN ----------------
 def main(args):
-    if not os.path.exists(args.src):
-        print(f"❗ Source file {args.src} not found. Please provide a valid source file.")
+    if not (all_input := load_json_file(args.src)):
+        print(f"❗ File {args.src} is invalid.")
         return
+    all_output = []
     
     driver = GraphDatabase.driver(URI, auth=AUTH)
-    retriever = create_retriever(driver, INDEX)
-    if not retriever:
+    if not (retriever := create_retriever(driver, INDEX)):
         print("❗ Retriever creation failed.")
         return
     
     match args.model:
         case "gpt-4o-mini" | "gpt-4o":
-            generate_llm = OpenAILLM(
-                model=args.model,
-                api_key=os.getenv("OPENAI_API_KEY"),
-            )
+            generate_llm = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
         case "qwen2.5-vl":
-            generate_llm = LocalLLM(
-                model="Qwen/Qwen2.5-VL-7B-Instruct",
-            )
+            generate_llm = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
         case "qwen3-vl":
-            generate_llm = LocalLLM(
-                model="Qwen/Qwen3-VL-8B-Instruct",
-            )
+            generate_llm = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
     
     # TODO: REPLACE MODELS WITH LLAVA OR QWEN
     caption_llm = OpenAILLM(
@@ -55,11 +50,8 @@ def main(args):
         api_key=os.getenv("OPENAI_API_KEY"),
     )
     
-    with open(args.src, "r", encoding="utf-8") as src_file:
-        all_input = json.load(src_file)
-        all_output = []
-    
-    total_generations = sum(len(input["query"]) for input in all_input) * 2
+    query_generations = [args.with_retrieval, args.without_retrieval].count("y")
+    total_generations = sum(len(input["query"]) for input in all_input) * query_generations
     pbar = tqdm(total=total_generations, desc="Processing generations")
 
     for input in all_input:
@@ -67,14 +59,9 @@ def main(args):
         qa_pairs = []
 
         for query in input["query"]:
-            for i in range(2):  # with and without retrieval
+            def generate(retriever: VectorCypherRetriever | None):
                 start_time = time.time()
-                if i == 0:
-                    pbar.set_postfix_str("with retrieval")
-                    response, caption, context_graph = generate_response(query, img_path, caption_llm, generate_llm, embedder, retriever)
-                else:
-                    pbar.set_postfix_str("without retrieval")
-                    response, caption, context_graph = generate_response(query, img_path, caption_llm, generate_llm, embedder, None)
+                response, caption, context_graph = generate_response(query, img_path, caption_llm, generate_llm, embedder, retriever)
                 elapsed_time = time.time() - start_time
 
                 qa_pairs.append({
@@ -85,7 +72,13 @@ def main(args):
                     "time": elapsed_time,
                 })
                 pbar.update(1)
-                break  # TEMP: ONLY WITH RETRIEVAL
+            
+            if args.with_retriever:
+                pbar.set_postfix_str("with retrieval")
+                generate(retriever)
+            if args.without_retriever:
+                pbar.set_postfix_str("without retrieval")
+                generate(None)
             break  # TEMP: ONLY FIRST QUERY
         
         all_output.append({
@@ -103,8 +96,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Data Extraction and Ingestion into Neo4j")
+    parser.add_argument("--with_retrieval", type=str, default="y", choices=["y", "n"])
+    parser.add_argument("--without_retrieval", type=str, default="n", choices=["y", "n"])
     parser.add_argument("--model", type=str, default="gpt-4o-mini", choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3"])
-    parser.add_argument("--src", type=str, default="../example/fetched.json")
-    parser.add_argument("--dst", type=str, default="../example/extracted.json")
+    parser.add_argument("--src", type=str, default="../example/input.json")
+    parser.add_argument("--dst", type=str, default="../example/output.json")
     args = parser.parse_args()
     main(args)

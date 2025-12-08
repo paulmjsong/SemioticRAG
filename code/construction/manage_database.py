@@ -1,4 +1,4 @@
-import asyncio, json, re
+import asyncio, re
 from tqdm import tqdm
 from neo4j import Driver
 from neo4j_graphrag.indexes import create_vector_index, upsert_vectors
@@ -9,30 +9,29 @@ from neo4j_graphrag.experimental.components.resolver import (
 )
 
 from utils.llm import BaseEmbedder
+from utils.utils import load_json_file
 
 
 # ---------------- ADD ENTITIES TO DB ----------------
 def add_to_database(driver: Driver, dst_path: str, embedder: BaseEmbedder, index_name: str) -> None:
-    with open(dst_path, "r", encoding="utf-8") as file:
-        data = json.load(file)
+    if not (data := load_json_file(dst_path)):
+        return
     
     ensure_vector_index(driver, embedder.get_dimension(), index_name)
-    
     form_ids: list[str] = []
-    form_embeds: list[list[float]] = []
+    form_embs: list[list[float]] = []
     
     with driver.session() as session:
         # Upsert nodes
         for entity in tqdm(data["entities"], total=len(data["entities"]), desc="⬆️  Upserting entities"):
             node_id = session.execute_write(create_node, entity)
             if node_id and entity["type"] == "Form":
+                embed_text = entity['name']
+                if entity.get("aliases"):
+                    embed_text += ". " + ". ".join(entity['aliases'])
+                # embed_text += ". " + entity['description']
                 form_ids.append(node_id)
-
-            embed_text = entity['name']
-            if entity.get("aliases"):
-                embed_text += ". " + ". ".join(entity['aliases'])
-            embed_text += ". " + entity['description']
-            form_embeds.append(embedder.embed_query(embed_text))
+                form_embs.append(embedder.embed_query(embed_text))
         
         # Batch upsert vectors for Forms
         if form_ids:
@@ -40,7 +39,7 @@ def add_to_database(driver: Driver, dst_path: str, embedder: BaseEmbedder, index
                 driver=driver,
                 ids=form_ids,
                 embedding_property="embedding",
-                embeddings=form_embeds,
+                embeddings=form_embs,
                 entity_type=EntityType.NODE,
             )
         

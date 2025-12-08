@@ -4,6 +4,7 @@ from neo4j_graphrag.generation.prompts import PromptTemplate
 
 from utils.llm import BaseLLM
 from utils.prompts import EXTRACT_SYSTEM_PROMPT, EXTRACT_USER_PROMPT
+from utils.utils import load_json_file
 
 
 # ---------------- EXTRACT ENTITIES ----------------
@@ -12,20 +13,18 @@ def extract_data(extract_llm: BaseLLM, src_path: str, dst_path: str, chunk_size:
         template=EXTRACT_USER_PROMPT,
         expected_inputs=["passage"],
     )
-    with open(src_path, "r") as src_file:
-        entries = json.load(src_file)
-    with open(dst_path, "w+", encoding="utf-8") as dst_file:
-        try:
-            data = json.load(dst_file)
-        except json.JSONDecodeError:
-            data = {
-                "entities": [],
-                "relations": [],
-            }
+    if not (entries := load_json_file(src_path)):
+        return
+    if not (data := load_json_file(dst_file)):
+        data = {
+            "entities": [],
+            "relations": [],
+        }
+    with open(dst_path, "w", encoding="utf-8") as dst_file:
         for i, entry in enumerate(entries):
             text = entry["body"]
             
-            # TODO: REPLACE WITH CLASSIFIER BASED CHUNKING
+            # TODO: REPLACE WITH SEMANTIC CHUNKING
             chunks = [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
             # END TODO
 
@@ -43,11 +42,7 @@ def extract_data(extract_llm: BaseLLM, src_path: str, dst_path: str, chunk_size:
             
             dst_file.seek(0)
             json.dump(data, dst_file, ensure_ascii=False, indent=4)
-            # dst_file.truncate()
-        
-        dst_file.seek(0)
-        json.dump(data, dst_file, ensure_ascii=False, indent=4)
-        # dst_file.truncate()
+            dst_file.truncate()
 
 
 # ---------------- UTILS ----------------
