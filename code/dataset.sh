@@ -3,6 +3,6 @@ python -m dataset.main \
 --heritage n \
 --folkency n \
 --create y \
---model gpt-4o-mini \
---src ../example/input.json \
---dst ../example/output.json
+--model none \
+--src dataset/한국민족문화대백과사전_3차.csv \
+--dst ../example/fetched.json
