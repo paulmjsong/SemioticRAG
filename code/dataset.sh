@@ -1,8 +1,8 @@
 python -m dataset.main \
---encykorea n \
---heritage n \
---folkency n \
---create y \
---model none \
---src dataset/한국민족문화대백과사전_3차.csv \
---dst ../example/fetched.json
+    --emuseum \
+    --save_dir ../example/dataset/
+# --encykorea \
+# --heritage \
+# --create \
+# --labels ../example/encykorea_artworks.csv \
+# --model gpt-4o-mini \

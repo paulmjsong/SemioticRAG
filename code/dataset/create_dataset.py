@@ -1,53 +1,41 @@
-import json, nltk, numpy as np
+import json, nltk, regex, numpy as np
 from numpy.linalg import norm
 
 from utils.llm import BaseLLM, BaseEmbedder
 from utils.utils import load_json_file
 
-# docs_format = {
-#     "title":   str,
-#     "img_url": str,
-#     "era":     str,
-#     "content": str,
-# }
 
-# data_format = {
-#     "title":     str,
-#     "img_url":   str,
-#     "era":       str,
-#     "sentences": list[str],
-# }
+def create_dataset(src_paths: list[str], dst_path: str, embedder: BaseEmbedder, llm: BaseLLM | None = None) -> None:
+    for src_path in src_paths:
+        if not (fetched := load_json_file(src_path)):
+            print(f"❗ File {src_path} is not valid JSON.")
+            continue
+        if not (dataset := load_json_file(dst_path)):
+            dataset = {}
 
-def create_dataset(src_path: str, dst_path: str, embedder: BaseEmbedder, llm: BaseLLM | None = None) -> None:
-    if not (docs := load_json_file(src_path)):
-        print(f"❗ File {src_path} is not valid JSON.")
-        return
-    if not (data := load_json_file(dst_path)):
-        data = {}
+        for i, item in enumerate(fetched):
+            text = item.get("desc")
+            sents = nltk.sent_tokenize(text)
+            good_sents = []
 
-    for i, doc in enumerate(docs):
-        text = doc.get("content")
-        sentences = nltk.sent_tokenize(text)
-        meaningful = []
+            for sent in sents:
+                if is_good_sent(sent, embedder, llm):
+                    good_sents.append(sent)
+            dataset[i] = {
+                "title":     item.get("title"),
+                "img_url":   item.get("img_url"),
+                "era":       item.get("era"),
+                "sentences": good_sents,
+            }
 
-        for sentence in sentences:
-            if is_meaningful(sentence, embedder, llm):
-                meaningful.append(sentence)
-        data[i] = {
-            "title": doc.get("title"),
-            "img_url": doc.get("img_url"),
-            "era": doc.get("era"),
-            "sentences": meaningful,
-        }
-
-    with open(dst_path, "w", encoding="utf-8") as dst_file:
-        json.dump(data, dst_file, ensure_ascii=False, indent=2)
+        with open(dst_path, "w", encoding="utf-8") as dst_file:
+            json.dump(dataset, dst_file, ensure_ascii=False, indent=2)
 
 
-def is_meaningful(sentence: str, embedder: BaseEmbedder, llm: BaseLLM | None = None) -> bool:
+def is_good_sent(sentence: str, embedder: BaseEmbedder) -> bool:
     # TODO: filtering logic
     # Step 1
-    regex_patterns = ["의미", "상징", "뜻", ""]  # but not "상징성" -> how?
+    regex_patterns = ["의미", "해석", "상징", "뜻", "염원", "교훈"]  # but not "상징성" -> how?
     if any(r in sentence for r in regex_patterns):
         return True
     # Step 2
@@ -64,11 +52,21 @@ def is_meaningful(sentence: str, embedder: BaseEmbedder, llm: BaseLLM | None = N
         similarity = dot_product / (magnitude1 * magnitude2)
         if similarity >= 0.7:
             return True
-    # Step 3
-    if llm:
-        system_prompt = "Determine if the given sentence contains information about symbolic meaning of a certain artwork or genre of artworks. Answer with either True or False. Do not output any other text."
-        user_prompt = f"Given: {sentence}\n\nTrue or False?"
-        response = llm.generate(user_prompt=user_prompt, system_prompt=system_prompt)
-        return bool(response)
     # END TODO
     return False
+
+
+def is_good_sent_llm(text: str, llm: BaseLLM) -> list:
+    # Step 3
+    if llm:
+        system_prompt = "From the given text, return all sentences that contain information about the symbolic meaning of an artwork or artistic genre. Return the sentences in their original form. The output must be in valid JSON format as an array of strings. If no sentences satisfy the condition, return an empty JSON array ([]). Do not output any other text."
+        user_prompt = f"Given: {text}"
+        response = llm.generate(user_prompt=user_prompt, system_prompt=system_prompt)
+        return response.json(response)
+
+
+def is_hangul(string: str) -> bool:
+    return bool(regex.search(r'\p{IsHangul}', string))
+
+def is_hanja(string: str) -> bool:
+    return bool(regex.search(r'\p{IsHan}', string))

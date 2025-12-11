@@ -6,5 +6,6 @@ openai
 openpyxl
 pandas
 python-dotenv
+regex
 requests
 tqdm

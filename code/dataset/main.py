@@ -1,43 +1,52 @@
 import argparse, os
 from dotenv import load_dotenv
 
-from fetch_documents import fetch_from_encykorea, fetch_from_heritage, fetch_from_folkency
-from create_dataset import create_dataset
-from utils.llm import OpenAILLM, HuggingFaceLLM, OllamaLLM, LocalLLM
-from utils.llm import OpenAIEmbedder, HuggingFaceEmbedder, OllamaEmbedder, LocalEmbedder
+from dataset.fetch_documents import fetch_from_encykorea, fetch_from_heritage, fetch_from_emuseum
+from dataset.create_dataset import create_dataset
+from utils.llm import OpenAILLM, LocalLLM
+from utils.llm import OpenAIEmbedder
 
 
 # ---------------- MAIN ----------------
 def main(args):
-    src_path = args.src
-    dst_path = args.dst
-    
-    if args.encykorea or args.heritage or args.folkency:
+    # --- FETCH DATA FROM SOURCES ---
+    if args.encykorea or args.heritage or args.emuseum:  # or args.folkency
         load_dotenv()
-        if args.encykorea == "y":
+        if args.encykorea:
             print("🔄 Fetching data from EncyKorea...")
             fetch_from_encykorea(
-                src_path, dst_path,
+                args.labels,
+                args.save_dir,
                 os.getenv("ENCYKOREA_API_KEY"),
-                os.getenv("ENCYKOREA_ENDPOINT_ARTICLE")
+                os.getenv("ENCYKOREA_ENDPOINT_DETAIL"),
             )
-        if args.heritage == "y":
+        if args.heritage:
             print("🔄 Fetching data from Heritage...")
             fetch_from_heritage(
-                src_path, dst_path,
-                os.getenv("HERITAGE_API_KEY"),
-                os.getenv("HERITAGE_ENDPOINT_ARTICLE")
+                args.save_dir,
+                os.getenv("HERITAGE_ENDPOINT_SEARCH"),
+                os.getenv("HERITAGE_ENDPOINT_DETAIL"),
             )
-        if args.folkency == "y":
-            print("🔄 Fetching data from FolkEncy...")
-            fetch_from_folkency(
-                src_path, dst_path,
-                os.getenv("FOLKENCY_API_KEY"),
-                os.getenv("FOLKENCY_ENDPOINT_IMAGES")
+        if args.emuseum:
+            print("🔄 Fetching data from eMuseum...")
+            fetch_from_emuseum(
+                args.save_dir,
+                os.getenv("EMUSEUM_WEBPAGE_URL"),
+                os.getenv("DATA_ENDPOINT_SEARCH"),
+                os.getenv("DATA_API_KEY"),
             )
         print("✅ Data fetching complete.")
     
-    if args.create == "y":
+    # --- CREATE DATASET FROM FETCHED DATA ---
+    file_paths = []
+    if args.create:
+        for filename in os.listdir(args.save_dir):
+            if filename.startswith("fetched_") and filename.endswith(".json"):
+                file_path = os.path.join(args.save_dir, filename)
+                file_paths.append(file_path)
+        if not file_paths:
+            print("No JSON file starting with 'fetched_' found.")
+            return
         match args.model:
             case "gpt-4o-mini" | "gpt-4o":
                 llm = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
@@ -45,25 +54,27 @@ def main(args):
                 llm = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
             case "qwen3-vl":
                 llm = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
-            case "none":
+            case None:
                 llm = None
         embedder = OpenAIEmbedder(
             model="text-embedding-3-large",
             model_dim=3072,
             api_key=os.getenv("OPENAI_API_KEY"),
         )
-        create_dataset(args.arc, args.dst, embedder, llm)
+        save_path = os.path.join(args.save_dir, "dataset.json")
+        create_dataset(file_paths, save_path, embedder, llm)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Data Fetching from Open Sources")
-    parser.add_argument("--encykorea", type=str, default="n", choices=["y", "n"])
-    parser.add_argument("--heritage", type=str, default="n", choices=["y", "n"])
-    parser.add_argument("--folkency", type=str, default="n", choices=["y", "n"])
-    parser.add_argument("--create", type=str, default="y", choices=["y", "n"])
-    # maybe remove --model later
-    parser.add_argument("--model", type=str, default="none", choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3", "none"])
-    parser.add_argument("--src", type=str, default="dataset/한국민족문화대백과사전_3차.csv")
-    parser.add_argument("--dst", type=str, default="../example/fetched.json")
+    parser.add_argument("--encykorea", action="store_true")
+    parser.add_argument("--heritage", action="store_true")
+    parser.add_argument("--emuseum", action="store_true")
+    parser.add_argument("--create", action="store_true")
+    parser.add_argument("--save_dir", type=str, default="../example/dataset/")
+    # for encykorea only
+    parser.add_argument("--labels", type=str, default=None)
+    # TODO: maybe remove --model later
+    parser.add_argument("--model", type=str, default=None, choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3"])
     args = parser.parse_args()
     main(args)

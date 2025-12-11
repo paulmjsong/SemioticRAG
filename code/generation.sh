@@ -1,6 +1,6 @@
 python -m generation.main \
---with_retrieval y \
---without_retrieval n \
---model gpt-4o-mini \
---src ../example/input.json \
---dst ../example/output.json
+    --with_retrieval \
+    --model gpt-4o-mini \
+    --src ../example/generation/input.json \
+    --dst ../example/generation/output.json
+# --without_retrieval \

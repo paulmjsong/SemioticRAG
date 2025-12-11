@@ -1,23 +1,30 @@
-import json, requests, pandas as pd
+import json, os, requests, time, pandas as pd
+from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 from utils.utils import load_json_file
 
 
-# ---------------- FETCH DATA ----------------
-def fetch_from_encykorea(src_path: str, dst_path: str, api_key: str, endpoint_url: str) -> None:
-    if src_path.endswith(".csv"):
-        df = pd.read_csv(src_path, header=None, dtype=str, encoding="utf-8")
-    elif src_path.endswith((".xls", "xlsx")):
-        df = pd.read_excel(src_path, header=None, dtype=str, encoding="utf-8")
+# ---------------- FETCH FROM ENCYKOREA ----------------
+def fetch_from_encykorea(labels_path: str, save_dir: str, api_key: str, endpoint_url: str) -> None:
+    if labels_path.endswith(".csv"):
+        df = pd.read_csv(labels_path, header=None, dtype=str, encoding="utf-8")
+    elif labels_path.endswith((".xls", "xlsx")):
+        df = pd.read_excel(labels_path, header=None, dtype=str, encoding="utf-8")
     else:
-        print(f"❗ File {src_path} is invalid.")
+        print(f"❗ File {labels_path} is invalid.")
         return
     
-    if not (fetched := load_json_file(dst_path)):
+    # img_dir = os.path.join(save_dir, "images_encykorea")
+    # if not os.path.exists(img_dir):
+    #     os.makedirs(img_dir)
+    
+    save_path = os.path.join(save_dir, "fetched_encykorea.json")
+    if not (fetched := load_json_file(save_path)):
         fetched = {}
-    counter = len(fetched) + 1
-    headers = { "X-API-Key": api_key }
+
+    headers = {"X-API-Key": api_key}
+    idx = len(fetched) + 1
 
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching data from EncyKorea"):
         eid = get_eid_from_row(
@@ -28,93 +35,211 @@ def fetch_from_encykorea(src_path: str, dst_path: str, api_key: str, endpoint_ur
         if eid is None:
             continue
         response = requests.get(url=endpoint_url+eid, headers=headers, timeout=30)
-        response.raise_for_status()
         data = response.json()
         
-        article = data.get("article")
+        if not (article := data.get("article")):
+            continue
+        if not (desc := article.get("body")):
+            continue
         if not (image := article.get("headMedia") or (article.get("relatedMedias") or [None])[0]):
             continue
-        if not (content := article.get("body")):
-            continue
-        fetched[counter] = {
-            "title":   f"{article.get('headword')} ({article.get('origin')})",
+        # TODO: download images
+        fetched[idx] = {
+            "title":   article.get('headword'),
             "img_url": image.get("url"),
             "era":     article.get("era"),
-            "content": content.replace('\r', '').split('\n', 1)[1].strip(),
+            "desc":    desc.replace('\r', '').split('\n', 1)[1].strip(),
         }
-        counter += 1
+        idx += 1
 
-    with open(dst_path, "w", encoding="utf-8") as dst_file:
+    with open(save_path, "w", encoding="utf-8") as dst_file:
         json.dump(fetched, dst_file, ensure_ascii=False, indent=4)
 
 
-def fetch_from_heritage(src_path: str, dst_path: str, api_key: str, endpoint_url: str) -> None:
-    if src_path.endswith(".csv"):
-        df = pd.read_csv(src_path, header=None, dtype=str, encoding="utf-8")
-    elif src_path.endswith((".xls", "xlsx")):
-        df = pd.read_excel(src_path, header=None, dtype=str, encoding="utf-8")
-    else:
-        print(f"❗ File {src_path} is invalid.")
-        return
+# ---------------- FETCH FROM HERITAGE ----------------
+def fetch_from_heritage(save_dir: str, search_url: str, detail_url: str) -> None:
+    ccbaKdcd = ""  # TODO
+    page_unit = 10000
+    page_idx = 1
+    items = []
+    pbar1 = tqdm(total=0, desc="Fetching relic ids")
+
+    # --- Fetch list pages ---
+    while True:
+        pbar1.update(1)
+        search_params = {
+            "ccbaKdcd":  ccbaKdcd,                              # 종목코드
+            "pageUnit":  page_unit,                             # 한 페이지 결과 수
+            "pageIndex": page_idx,                              # 페이지 번호
+        }
+        if not (data := fetch_json(search_url, search_params)):
+            continue
+        if pbar1.total == 0:
+            pbar1.total = data.get("totalCnt")
+            pbar1.refresh()
+        entries = data.get("item")
+        pbar1.update(len(entries))
+
+        for entry in entries:
+            items.append({
+                # "ccbaMnm1": entry.get("ccbaMnm1"),            # 명칭(국문)
+                "ccbaAsno": entry.get("ccbaAsno"),              # 관리번호
+                "ccbaCtcd": entry.get("ccbaCtcd"),              # 시도코드
+            })
+        if len(entries) < page_unit:
+            break
+        page_idx += 1
+        time.sleep(0.3)
+
+    # --- Fetch detail pages ---
+    # img_dir = os.path.join(save_dir, "images_heritage")
+    # if not os.path.exists(img_dir):
+    #     os.makedirs(img_dir)
     
-    if not (fetched := load_json_file(dst_path)):
+    save_path = os.path.join(save_dir, "fetched_heritage.json")
+    if not (fetched := load_json_file(save_path)):
         fetched = {}
-    counter = len(fetched) + 1
-
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching data from FolkEncy"):
-        params = {
-            "ccbaKdcd": row.values[1],
-            "ccbaAsno": row.values[2],
-            "ccbaCtcd": row.values[3],
+    
+    idx = len(fetched) + 1
+    
+    for item in tqdm(items, total=len(items), desc="Fetching relic details"):
+        detail_params = {
+            "ccbaKdcd": ccbaKdcd,                               # 종목코드
+            "ccbaAsno": item["ccbaAsno"],                       # 관리번호
+            "ccbaCtcd": item["ccbaCtcd"],                       # 시도코드
         }
-        response = requests.get(url=endpoint_url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        if not (data := fetch_json(detail_url, detail_params)):
+            continue
+        entries = data["result"].get("item")
         
-        fetched[counter] = {
-            "title":   row.values[0],
-            "img_url": data.get("imageUrl"),
-            "era":     data.get("ccceName"),
-            "content": data.get("content"),
-        }
-        counter += 1
+        for entry in entries:
+            # TODO: download images
+            fetched[idx] = {
+                "title":   entry.get("ccbaMnm1"),               # 명칭(국문)
+                "img_url": entry.get("imageUrl"),               # 대표이미지 URL
+                "era":     entry.get("ccceName"),               # 시대
+                "desc":    entry.get("content"),                # 설명
+            }
+            idx += 1
+        time.sleep(0.3)
 
-    with open(dst_path, "a", encoding="utf-8") as dst_file:
+    with open(save_path, "w", encoding="utf-8") as dst_file:
         json.dump(fetched, dst_file, ensure_ascii=False, indent=4)
 
 
-def fetch_from_folkency(src_path: str, dst_path: str, api_key: str, endpoint_url: str) -> None:
-    if src_path.endswith(".csv"):
-        df = pd.read_csv(src_path, header=None, dtype=str, encoding="utf-8")
-    elif src_path.endswith((".xls", "xlsx")):
-        df = pd.read_excel(src_path, header=None, dtype=str, encoding="utf-8")
-    else:
-        print(f"❗ File {src_path} is invalid.")
-        return
-    
-    if not (fetched := load_json_file(dst_path)):
-        fetched = {}
-    counter = len(fetched) + 1
+# ---------------- FETCH FROM EMUSEUM ----------------
+def fetch_from_emuseum(save_dir: str, webpage_url: str, endpoint_url: str, api_key: str) -> None:
+    # --- Fetch items ---
+    total = 1836
+    page_idx = 0
+    items = []
+    pbar1 = tqdm(total=total, desc="Fetching relic ids")
 
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching data from FolkEncy"):
-        params = {
-            "tit_idx": row.values[1],
-            "korname": row.values[0],
-            "serviceKey": api_key,
+    while page_idx <= total:
+        pbar1.update(1)
+        page_idx += 1
+        web_params = {
+            "pageNum":    page_idx,                             # 페이지 번호
+            "sort":       "relicId",                            # 소장품 번호 순
+            "detailFlag": "true",                               # 
+            "facet3Lv1":  "PS06001",                            # 국가 코드 ("한국")
+            "facet5Lv1":  "PS09009",                            # 용도 분류 코드 ("문화예술")
+            "facet5Lv2":  "PS09009003",                         # 용도 분류 코드 ("서화")
+            "facet5Lv3":  "PS09009003002",                      # 용도 분류 코드 ("회화")
+            "facet5Lv4":  "PS09009003002002",                   # 용도 분류 코드 ("민화")
         }
-        response = requests.get(url=endpoint_url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        if not (soup := fetch_html(webpage_url, web_params)):
+            break
         
-        fetched[counter] = {
-            "title":   data.get("summary"),
-            "img_url": data.get("img_url_l"),
-            "era":     None,
-            "content": None,
-        }
-        counter += 1
+        if (tag := soup.find("input", {"name": "relicId"})):
+            relic_id = tag["value"]
+        else:
+            continue
 
-    with open(dst_path, "a", encoding="utf-8") as dst_file:
+        if (desc_tag := soup.find("span", class_="float-left wc110 lh35 mt3")):
+            desc_raw = desc_tag.get_text(separator="\n", strip=True)
+            desc = ". ".join([line.lstrip("- ").strip(". ") for line in desc_raw.split("\n")]) + "."
+        else:
+            continue
+
+        if (tit_tag := soup.find("p", id="relicTitle")):
+            title = tit_tag.get_text(strip=True)
+        else:
+            title = None
+
+        if (era_tag := soup.find("em", string="국적/시대")):
+            era_raw = era_tag.find_next("span").get_text(strip=True)
+            era = era_raw.split("-")[-1].strip()
+        else:
+            era = None
+        
+        items.append({
+            "id":    relic_id,
+            "title": title,
+            "era":   era,
+            "desc":  desc,
+        })
+    pbar1.close()
+    # print(items[-1])                                          # DEBUG: print last item
+    
+    # --- Fetch images ---
+    img_dir = os.path.join(save_dir, "images_emuseum")
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+
+    save_path = os.path.join(save_dir, "fetched_emuseum.json")
+    if not (fetched := load_json_file(save_path)):
+        fetched = {}
+    
+    page_unit = 10000
+    page_idx = 0
+    idx = len(fetched) + 1
+    pbar2 = tqdm(total=0, desc="Fetching relic images")
+    
+    while len(items) > 0:
+        page_idx += 1
+        end_params = {
+            "serviceKey":  api_key,                             # 인증키
+            "numOfRows":   page_unit,                           # 한 페이지 결과 수
+            "pageNo":      page_idx,                            # 페이지 번호
+            "purposeCode": "PS09009",                           # 용도 분류 코드 ("문화예술")
+            # "id": "PS0100100100500530900000",                 # DEBUG: print id
+        }
+        if not (data := fetch_json(endpoint_url, end_params)):
+            continue
+        if pbar2.total == 0:
+            pbar2.total = data.get("totalCount")
+            pbar2.refresh()
+        entries = data.get("list")
+        pbar2.update(len(entries))
+
+        for entry in entries:
+            for i, item in list(enumerate(items)):
+                if (relic_id := entry.get("id")) != item["id"]:
+                    continue
+                if not (img_url := entry.get("imgUri")):
+                    continue
+                img_path = download_img(img_url, img_dir, relic_id)
+                title_kr = entry.get("nameKr") or entry.get("name") or ""
+                if not title_kr:
+                    title_kr = item["title"]
+                fetched[idx] = {
+                    "title": title_kr,                  # 명칭(국문)
+                    "image": img_path,                  # 이미지 경로
+                    "era":   item["era"],               # 시대
+                    "desc":  item["desc"],              # 설명
+                }
+                del items[i]
+                idx += 1
+            if not items:
+                break
+        if len(entries) < page_unit:
+            break
+        time.sleep(0.3)
+    
+    pbar2.close()
+
+    with open(save_path, "w", encoding="utf-8") as dst_file:
         json.dump(fetched, dst_file, ensure_ascii=False, indent=4)
 
 
@@ -128,3 +253,56 @@ def get_eid_from_row(row: list, include: list[str] = [], exclude: list[str] = []
     if exclude != [] and all(key not in tag for key in exclude):
         return url.strip().split("/")[-1]
     return None
+
+def fetch_json(url: str, params: dict, max_attempts: int=5, delay: float=1.0) -> dict | None:
+    headers = {"Accept": "application/json"}
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=30)
+            # --- Try parsing JSON ---
+            try:
+                data = response.json()
+            except ValueError:
+                print(f"[WARN] JSON parse failure (attempt {attempt}/{max_attempts})")
+                time.sleep(delay)
+                continue
+            # --- Success ---
+            return data
+        except Exception as e:
+            print(f"[ERROR] Request failed (attempt {attempt}/{max_attempts}): {e}")
+            time.sleep(delay)
+
+    raise RuntimeError("Failed to fetch valid JSON after multiple attempts")
+
+def fetch_html(url: str, params: dict, max_attempts: int=5, delay: float=1.0) -> dict | None:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            # --- Try parsing HTML ---
+            try:
+                soup = BeautifulSoup(response.text, "html.parser")
+            except ValueError:
+                print(f"[WARN] HTML parse failure (attempt {attempt}/{max_attempts})")
+                time.sleep(delay)
+                continue
+            # --- Success ---
+            return soup
+        except Exception as e:
+            print(f"[ERROR] Request failed (attempt {attempt}/{max_attempts}): {e}")
+            time.sleep(delay)
+
+    raise RuntimeError("Failed to fetch valid HTML after multiple attempts")
+
+def download_img(url: str, save_dir: dict, relic_id: str, max_attempts: int=5, delay: float=1.0) -> str | None:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(url, timeout=30)
+            path = os.path.join(save_dir, f"{relic_id}.jpg")
+            with open(path, "wb") as f:
+                f.write(response.content)
+            return path
+        except Exception as e:
+            print(f"[ERROR] Request failed (attempt {attempt}/{max_attempts}): {e}")
+            time.sleep(delay)
+
+    raise RuntimeError("Failed to fetch image after multiple attempts")

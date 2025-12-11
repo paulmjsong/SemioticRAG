@@ -44,11 +44,11 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Data Extraction and Ingestion into Neo4j")
-    parser.add_argument("--extract", type=str, default="y", choices=["y", "n"])
-    parser.add_argument("--clear", type=str, default="y", choices=["y", "n"])
-    parser.add_argument("--upsert", type=str, default="y", choices=["y", "n"])
+    parser.add_argument("--extract", action="store_true")
+    parser.add_argument("--clear", action="store_true")
+    parser.add_argument("--upsert", action="store_true")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3"])
-    parser.add_argument("--src", type=str, default="../example/fetched.json")
-    parser.add_argument("--dst", type=str, default="../example/extracted.json")
+    parser.add_argument("--src", type=str, default="../example/construction/fetched.json")
+    parser.add_argument("--dst", type=str, default="../example/construction/extracted.json")
     args = parser.parse_args()
     main(args)
