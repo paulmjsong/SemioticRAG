@@ -15,7 +15,7 @@ def main(args):
         if args.encykorea:
             print("🔄 Fetching data from EncyKorea...")
             fetch_from_encykorea(
-                args.labels,
+                args.encykorea_file,
                 args.save_dir,
                 os.getenv("ENCYKOREA_API_KEY"),
                 os.getenv("ENCYKOREA_ENDPOINT_DETAIL"),
@@ -41,8 +41,7 @@ def main(args):
     if args.create:
         file_paths = []
         for filename in os.listdir(args.save_dir):
-            if filename.startswith("fetched_") and filename.endswith(".json"):
-            # if filename == "fetched_test.json":  # DEBUG: use only test set
+            if filename.startswith("fetched_emuseum") and filename.endswith(".json"):
                 file_path = os.path.join(args.save_dir, filename)
                 file_paths.append(file_path)
         if not file_paths:
@@ -66,7 +65,6 @@ if __name__ == "__main__":
     parser.add_argument("--create", action="store_true")
     parser.add_argument("--is_analysis", action="store_true")
     parser.add_argument("--save_dir", type=str, default="../example/dataset/")
-    # for encykorea only
-    parser.add_argument("--labels", type=str, default=None)
+    parser.add_argument("--encykorea_file", type=str, default=None)  # For EncyKorea only
     args = parser.parse_args()
     main(args)
