@@ -20,12 +20,12 @@ def main(args):
     if args.extract == "y":
         match args.model:
             case "gpt-4o-mini" | "gpt-4o":
-                extract_llm = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
+                gen_model = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
             case "qwen2.5-vl":
-                extract_llm = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
+                gen_model = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
             case "qwen3-vl":
-                extract_llm = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
-        extract_data(extract_llm, args.src, args.dst)
+                gen_model = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
+        extract_data(gen_model, args.src, args.dst)
     
     if args.clear == "y":
         clear_database(driver)

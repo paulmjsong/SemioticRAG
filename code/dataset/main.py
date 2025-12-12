@@ -3,15 +3,15 @@ from dotenv import load_dotenv
 
 from dataset.fetch_documents import fetch_from_encykorea, fetch_from_heritage, fetch_from_emuseum
 from dataset.create_dataset import create_dataset
-from utils.llm import OpenAILLM, LocalLLM
-from utils.llm import OpenAIEmbedder
+from utils.llm import LocalClassifier, OpenAIEmbedder
 
 
 # ---------------- MAIN ----------------
 def main(args):
+    load_dotenv()
+
     # --- FETCH DATA FROM SOURCES ---
     if args.encykorea or args.heritage or args.emuseum:  # or args.folkency
-        load_dotenv()
         if args.encykorea:
             print("🔄 Fetching data from EncyKorea...")
             fetch_from_encykorea(
@@ -38,31 +38,24 @@ def main(args):
         print("✅ Data fetching complete.")
     
     # --- CREATE DATASET FROM FETCHED DATA ---
-    file_paths = []
     if args.create:
+        file_paths = []
         for filename in os.listdir(args.save_dir):
             if filename.startswith("fetched_") and filename.endswith(".json"):
+            # if filename == "fetched_test.json":  # DEBUG: use only test set
                 file_path = os.path.join(args.save_dir, filename)
                 file_paths.append(file_path)
         if not file_paths:
             print("No JSON file starting with 'fetched_' found.")
             return
-        match args.model:
-            case "gpt-4o-mini" | "gpt-4o":
-                llm = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
-            case "qwen2.5-vl":
-                llm = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
-            case "qwen3-vl":
-                llm = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
-            case None:
-                llm = None
-        embedder = OpenAIEmbedder(
-            model="text-embedding-3-large",
-            model_dim=3072,
-            api_key=os.getenv("OPENAI_API_KEY"),
-        )
+        
+        # classifier = LocalClassifier(model="joeddav/xlm-roberta-large-xnli")
+        classifier = LocalClassifier(model="MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7")
         save_path = os.path.join(args.save_dir, "dataset.json")
-        create_dataset(file_paths, save_path, embedder, llm)
+
+        print("🔄 Parsing fetched data to create dataset...")
+        create_dataset(file_paths, save_path, classifier, args.is_analysis)
+        print("✅ Dataset created.")
 
 
 if __name__ == "__main__":
@@ -71,10 +64,9 @@ if __name__ == "__main__":
     parser.add_argument("--heritage", action="store_true")
     parser.add_argument("--emuseum", action="store_true")
     parser.add_argument("--create", action="store_true")
+    parser.add_argument("--is_analysis", action="store_true")
     parser.add_argument("--save_dir", type=str, default="../example/dataset/")
     # for encykorea only
     parser.add_argument("--labels", type=str, default=None)
-    # TODO: maybe remove --model later
-    parser.add_argument("--model", type=str, default=None, choices=["gpt-4o-mini", "gpt-4o", "qwen2.5", "qwen3"])
     args = parser.parse_args()
     main(args)

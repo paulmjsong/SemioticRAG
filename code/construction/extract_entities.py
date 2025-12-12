@@ -8,7 +8,7 @@ from utils.utils import load_json_file
 
 
 # ---------------- EXTRACT ENTITIES ----------------
-def extract_data(extract_llm: BaseLLM, src_path: str, dst_path: str, chunk_size: int = 512) -> None:
+def extract_data(gen_model: BaseLLM, src_path: str, dst_path: str, chunk_size: int = 512) -> None:
     prompt = PromptTemplate(
         template=EXTRACT_USER_PROMPT,
         expected_inputs=["passage"],
@@ -31,7 +31,7 @@ def extract_data(extract_llm: BaseLLM, src_path: str, dst_path: str, chunk_size:
             for chunk in tqdm(chunks, desc=f"🔄 Processing entry {i+1}/{len(entries)}", leave=False):
                 if len(chunk.strip()) == 0:
                     continue
-                response = extract_llm.generate(
+                response = gen_model.generate(
                     prompt.format(passage=chunk),
                     EXTRACT_SYSTEM_PROMPT,
                 )
@@ -43,9 +43,3 @@ def extract_data(extract_llm: BaseLLM, src_path: str, dst_path: str, chunk_size:
             dst_file.seek(0)
             json.dump(data, dst_file, ensure_ascii=False, indent=4)
             dst_file.truncate()
-
-
-# ---------------- UTILS ----------------
-def clean_llm_output(output: str) -> str:
-    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', output, flags=re.UNICODE)
-    return cleaned

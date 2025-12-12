@@ -5,8 +5,7 @@ from neo4j import GraphDatabase
 from neo4j_graphrag.retrievers import VectorCypherRetriever
 
 from generation.handle_query import create_retriever, generate_response
-from utils.llm import OpenAILLM, HuggingFaceLLM, OllamaLLM, LocalLLM
-from utils.llm import OpenAIEmbedder, HuggingFaceEmbedder, OllamaEmbedder, LocalEmbedder
+from utils.llm import OpenAILLM, LocalLLM, OpenAIEmbedder
 from utils.utils import load_json_file
 
 
@@ -31,14 +30,14 @@ def main(args):
     
     match args.model:
         case "gpt-4o-mini" | "gpt-4o":
-            generate_llm = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
+            gen_model = OpenAILLM(model=args.model, api_key=os.getenv("OPENAI_API_KEY"))
         case "qwen2.5-vl":
-            generate_llm = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
+            gen_model = LocalLLM(model="Qwen/Qwen2.5-VL-7B-Instruct")
         case "qwen3-vl":
-            generate_llm = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
+            gen_model = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
     
     # TODO: REPLACE MODELS WITH LLAVA OR QWEN
-    caption_llm = OpenAILLM(
+    cap_model = OpenAILLM(
         model="gpt-4o-mini",
         api_key=os.getenv("OPENAI_API_KEY"),
     )
@@ -61,7 +60,7 @@ def main(args):
         for query in input["query"]:
             def generate(retriever: VectorCypherRetriever | None):
                 start_time = time.time()
-                response, caption, context_graph = generate_response(query, img_path, caption_llm, generate_llm, embedder, retriever)
+                response, caption, context_graph = generate_response(query, img_path, cap_model, gen_model, embedder, retriever)
                 elapsed_time = time.time() - start_time
 
                 qa_pairs.append({

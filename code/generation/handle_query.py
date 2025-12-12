@@ -82,14 +82,14 @@ def retrieve_context(retriever: VectorCypherRetriever, query_vector: list[float]
 
 
 # ---------------- GENERATION ----------------
-def generate_response(query: str, image_path: str, caption_llm: BaseLLM, generate_llm: BaseLLM, embedder: BaseEmbedder, retriever: VectorCypherRetriever=None) -> tuple[str, str, dict]:
+def generate_response(query: str, image_path: str, cap_model: BaseLLM, gen_model: BaseLLM, embedder: BaseEmbedder, retriever: VectorCypherRetriever=None) -> tuple[str, str, dict]:
     if retriever is None:
         # print("Generating response without retrieval.")
         caption = ""
         context_graph = ""
     else:
         # print("Generating response with retrieval.")
-        caption = caption_llm.generate(CAPTION_USER_PROMPT, CAPTION_SYSTEM_PROMPT, image_path)
+        caption = cap_model.generate(CAPTION_USER_PROMPT, CAPTION_SYSTEM_PROMPT, image_path)
         # print(f"Generated caption: {caption}")
         caption_vector = embedder.embed(caption)
         context_graph = retrieve_context(retriever, caption_vector)
@@ -100,7 +100,7 @@ def generate_response(query: str, image_path: str, caption_llm: BaseLLM, generat
         expected_inputs=["context", "query"],
     ).format(context=str(context_graph), query=query)
 
-    response = generate_llm.generate(prompt, GENERATE_SYSTEM_PROMPT, image_path)
+    response = gen_model.generate(prompt, GENERATE_SYSTEM_PROMPT, image_path)
     return (response, caption, context_graph)
 
 

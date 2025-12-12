@@ -1,8 +1,8 @@
 python -m dataset.main \
-    --emuseum \
+    --create \
+    --is_analysis \
     --save_dir ../example/dataset/
 # --encykorea \
 # --heritage \
-# --create \
-# --labels ../example/encykorea_artworks.csv \
-# --model gpt-4o-mini \
+# --emuseum \
+# --labels ../example/encykorea_artworks.csv

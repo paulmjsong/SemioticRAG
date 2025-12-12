@@ -5,7 +5,7 @@ numpy
 openai
 openpyxl
 pandas
+protobuf
 python-dotenv
-regex
 requests
 tqdm

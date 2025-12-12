@@ -10,6 +10,10 @@ class BaseLLM:
     def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
         raise NotImplementedError
 
+class BaseClassifier:
+    def classify(self, sequences: list[str], labels: list[str], template: str|None=None) -> list[str]:
+        raise NotImplementedError
+
 class BaseEmbedder:
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError
@@ -80,6 +84,29 @@ class LocalLLM:
             **kwargs,
         )
         return response[0]['generated_text'].strip()
+
+
+# ---------------- CLASSIFIER WRAPPER ----------------
+class LocalClassifier(BaseClassifier):
+    def __init__(self, model: str):
+        self.pipe = pipeline(
+            task="zero-shot-classification",
+            model=model,
+        )
+
+    def classify(self, sequences: list[str], candidate_labels: list[str], hypothesis_template: str|None=None) -> list[str]:
+        if hypothesis_template:
+            return self.pipe(
+                sequences=sequences,
+                candidate_labels=candidate_labels,
+                hypothesis_template=hypothesis_template,
+                multi_label=False,
+            )
+        return self.pipe(
+            sequences=sequences,
+            candidate_labels=candidate_labels,
+            multi_label=False,
+        )
 
 
 # ---------------- EMBEDDER WRAPPER ----------------

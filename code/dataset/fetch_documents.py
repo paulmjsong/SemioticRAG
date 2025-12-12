@@ -132,7 +132,7 @@ def fetch_from_emuseum(save_dir: str, webpage_url: str, endpoint_url: str, api_k
     # --- Fetch items ---
     total = 1836
     page_idx = 0
-    items = []
+    items = {}
     pbar1 = tqdm(total=total, desc="Fetching relic ids")
 
     while page_idx <= total:
@@ -173,14 +173,12 @@ def fetch_from_emuseum(save_dir: str, webpage_url: str, endpoint_url: str, api_k
         else:
             era = None
         
-        items.append({
-            "id":    relic_id,
+        items[relic_id] ={
             "title": title,
             "era":   era,
             "desc":  desc,
-        })
+        }
     pbar1.close()
-    # print(items[-1])                                          # DEBUG: print last item
     
     # --- Fetch images ---
     img_dir = os.path.join(save_dir, "images_emuseum")
@@ -196,14 +194,13 @@ def fetch_from_emuseum(save_dir: str, webpage_url: str, endpoint_url: str, api_k
     idx = len(fetched) + 1
     pbar2 = tqdm(total=0, desc="Fetching relic images")
     
-    while len(items) > 0:
+    while items:
         page_idx += 1
         end_params = {
             "serviceKey":  api_key,                             # 인증키
             "numOfRows":   page_unit,                           # 한 페이지 결과 수
             "pageNo":      page_idx,                            # 페이지 번호
             "purposeCode": "PS09009",                           # 용도 분류 코드 ("문화예술")
-            # "id": "PS0100100100500530900000",                 # DEBUG: print id
         }
         if not (data := fetch_json(endpoint_url, end_params)):
             continue
@@ -214,25 +211,26 @@ def fetch_from_emuseum(save_dir: str, webpage_url: str, endpoint_url: str, api_k
         pbar2.update(len(entries))
 
         for entry in entries:
-            for i, item in list(enumerate(items)):
-                if (relic_id := entry.get("id")) != item["id"]:
-                    continue
-                if not (img_url := entry.get("imgUri")):
-                    continue
-                img_path = download_img(img_url, img_dir, relic_id)
-                title_kr = entry.get("nameKr") or entry.get("name") or ""
-                if not title_kr:
-                    title_kr = item["title"]
-                fetched[idx] = {
-                    "title": title_kr,                  # 명칭(국문)
-                    "image": img_path,                  # 이미지 경로
-                    "era":   item["era"],               # 시대
-                    "desc":  item["desc"],              # 설명
-                }
-                del items[i]
-                idx += 1
+            if (relic_id := entry.get("id")) not in items:
+                continue
+
+            item = items.pop(relic_id)
+            if not (img_url := entry.get("imgUri")):
+                continue
+            
+            img_path = download_img(img_url, img_dir, relic_id)
+            title_kr = entry.get("nameKr") or entry.get("name") or item["title"]
+            fetched[idx] = {
+                "title": title_kr,                  # 명칭(국문)
+                "image": img_path,                  # 이미지 경로
+                "era":   item["era"],               # 시대
+                "desc":  item["desc"],              # 설명
+            }
+            idx += 1
+            
             if not items:
                 break
+        
         if len(entries) < page_unit:
             break
         time.sleep(0.3)
@@ -293,11 +291,11 @@ def fetch_html(url: str, params: dict, max_attempts: int=5, delay: float=1.0) ->
 
     raise RuntimeError("Failed to fetch valid HTML after multiple attempts")
 
-def download_img(url: str, save_dir: dict, relic_id: str, max_attempts: int=5, delay: float=1.0) -> str | None:
+def download_img(url: str, save_dir: dict, save_name: str, max_attempts: int=5, delay: float=1.0) -> str | None:
     for attempt in range(1, max_attempts + 1):
         try:
             response = requests.get(url, timeout=30)
-            path = os.path.join(save_dir, f"{relic_id}.jpg")
+            path = os.path.join(save_dir, f"{save_name}.jpg")
             with open(path, "wb") as f:
                 f.write(response.content)
             return path
