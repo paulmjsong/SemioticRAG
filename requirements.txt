@@ -8,4 +8,6 @@ pandas
 protobuf
 python-dotenv
 requests
+sentence_transformers
 tqdm
+transformers

@@ -4,8 +4,7 @@ from neo4j import GraphDatabase
 
 from construction.extract_entities import extract_data
 from construction.manage_database import clear_database, add_to_database
-from utils.llm import OpenAILLM, HuggingFaceLLM, OllamaLLM, LocalLLM
-from utils.llm import OpenAIEmbedder, HuggingFaceEmbedder, OllamaEmbedder, LocalEmbedder
+from utils.llm import OpenAILLM, LocalLLM, OpenAIEmbedder
 
 
 # ---------------- NEO4J SETUP ----------------

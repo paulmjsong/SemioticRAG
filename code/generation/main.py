@@ -36,11 +36,10 @@ def main(args):
         case "qwen3-vl":
             gen_model = LocalLLM(model="Qwen/Qwen3-VL-8B-Instruct")
     
-    # TODO: REPLACE MODELS WITH LLAVA OR QWEN
-    cap_model = OpenAILLM(
-        model="gpt-4o-mini",
-        api_key=os.getenv("OPENAI_API_KEY"),
-    )
+    # TODO: SELECT MODEL FOR IMAGE TAGGING / CAPTIONING
+    # cap_model = OpenAILLM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+    # cap_model = LocalLLM(model="microsoft/Florence-2-base")
+    cap_model = LocalLLM(model="microsoft/Florence-2-large")
     # END TODO
 
     embedder = OpenAIEmbedder(

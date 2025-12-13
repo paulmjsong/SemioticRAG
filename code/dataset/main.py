@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 from dataset.fetch_documents import fetch_from_encykorea, fetch_from_heritage, fetch_from_emuseum
 from dataset.create_dataset import create_dataset
-from utils.llm import LocalClassifier, OpenAIEmbedder
+from utils.llm import LocalClassifier
 
 
 # ---------------- MAIN ----------------
@@ -53,7 +53,7 @@ def main(args):
         save_path = os.path.join(args.save_dir, "dataset.json")
 
         print("🔄 Parsing fetched data to create dataset...")
-        create_dataset(file_paths, save_path, classifier, args.is_analysis)
+        create_dataset(file_paths, save_path, classifier)
         print("✅ Dataset created.")
 
 
@@ -63,7 +63,6 @@ if __name__ == "__main__":
     parser.add_argument("--heritage", action="store_true")
     parser.add_argument("--emuseum", action="store_true")
     parser.add_argument("--create", action="store_true")
-    parser.add_argument("--is_analysis", action="store_true")
     parser.add_argument("--save_dir", type=str, default="../example/dataset/")
     parser.add_argument("--encykorea_file", type=str, default=None)  # For EncyKorea only
     args = parser.parse_args()

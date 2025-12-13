@@ -4,5 +4,4 @@ python -m dataset.main \
 # --encykorea \
 # --heritage \
 # --emuseum \
-# --is_analysis \
 # --encykorea_file ../example/encykorea_artworks.csv

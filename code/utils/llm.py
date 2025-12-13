@@ -1,13 +1,12 @@
 import base64, ollama, torch
 from openai import OpenAI
-from huggingface_hub import InferenceClient
+from sentence_transformers import SentenceTransformer
 from transformers import pipeline
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings, HuggingFaceEmbeddings
 
 
 # ---------------- BASE CLASSES ----------------
 class BaseLLM:
-    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
+    def generate(self, user_prompt: str, system_prompt: str|None=None, img_path: str|None=None, **kwargs) -> str:
         raise NotImplementedError
 
 class BaseClassifier:
@@ -19,7 +18,7 @@ class BaseEmbedder:
         raise NotImplementedError
     
     def get_dimension(self) -> int:
-        return self.dimension
+        return NotImplementedError
 
 
 # ---------------- LLM WRAPPER ----------------
@@ -28,8 +27,8 @@ class OpenAILLM(BaseLLM):
         self.client = OpenAI(api_key=api_key)
         self.model = model
 
-    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
-        messages = build_messages(user_prompt, system_prompt, img_path)
+    def generate(self, user_prompt: str, system_prompt: str|None=None, img_path: str|None=None, **kwargs) -> str:
+        messages = _build_messages(user_prompt, system_prompt, img_path)
         response = self.client.chat.completions.create(
             messages=messages,
             model=self.model,
@@ -37,37 +36,7 @@ class OpenAILLM(BaseLLM):
         )
         return response.choices[0].message.content.strip()
 
-class HuggingFaceLLM:
-    def __init__(self, model: str, api_key: str, billing_address: str=None):
-        self.client = InferenceClient(
-            model=model,
-            api_key=api_key,
-            headers={"X-HF-Bill-To": billing_address} if billing_address else None,
-        )
-
-    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
-        messages = build_messages(user_prompt, system_prompt, img_path)
-        response = self.client.chat.completions.create(
-            messages=messages,
-            **kwargs,
-        )
-        return response.choices[0].message.content.strip()
-
-class OllamaLLM:
-    def __init__(self, model: str):
-        self.client = ollama.Client()
-        self.model = model
-
-    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
-        messages = build_messages(user_prompt, system_prompt, img_path)
-        response = ollama.chat(
-            messages=messages,
-            model=self.model,
-            **kwargs,
-        )
-        return response.choices[0].message.content.strip()
-
-class LocalLLM:
+class LocalLLM(BaseLLM):
     def __init__(self, model: str):
         self.pipe = pipeline(
             task="image-text-to-text",
@@ -76,8 +45,8 @@ class LocalLLM:
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
         )
 
-    def generate(self, user_prompt: str, system_prompt: str=None, img_path: str=None, **kwargs) -> str:
-        messages = build_messages(user_prompt, system_prompt, img_path)
+    def generate(self, user_prompt: str, system_prompt: str|None=None, img_path: str|None=None, **kwargs) -> str:
+        messages = _build_messages(user_prompt, system_prompt, img_path)
         response = self.pipe(
             text=messages,
             return_full_text=False,
@@ -117,53 +86,30 @@ class OpenAIEmbedder(BaseEmbedder):
         self.dimension = model_dim
 
     def embed(self, text: str) -> list[float]:
-        response = self.client.embeddings.create(
-            input=text,
-            model=self.model,
-        )
+        response = self.client.embeddings.create(input=text, model=self.model)
         return response.data[0].embedding
-
-class HuggingFaceEmbedder(BaseEmbedder):
-    def __init__(self, model: str, model_dim: int, api_key: str, billing_address: str=None):
-        self.embedder = HuggingFaceInferenceAPIEmbeddings(
-            model_name=model,
-            api_key=api_key,
-            headers={"X-HF-Bill-To": billing_address} if billing_address else None,
-        )
-        self.dimension = model_dim
-
-    def embed(self, text: str) -> list[float]:
-        return self.embedder.embed_query(text)
-
-class OllamaEmbedder(BaseEmbedder):
-    def __init__(self, model: str, model_dim: int):
-        self.client = ollama.Client()
-        self.model = model
-        self.dimension = model_dim
-
-    def embed(self, text: str) -> list[float]:
-        response = self.client.embeddings(
-            prompt=text,
-            model=self.model,
-        )
-        return response["embedding"]
+    
+    def get_dimension(self) -> int:
+        return self.dimension
 
 class LocalEmbedder(BaseEmbedder):
-    def __init__(self, model: str, model_dim: int):
-        self.embedder = HuggingFaceEmbeddings(model_name=model)
-        self.dimension = model_dim
+    def __init__(self, model: str):
+        self.embedder = SentenceTransformer(model_name_or_path=model)
 
     def embed(self, text: str) -> list[float]:
-        return self.embedder.embed_query(text)
+        return self.embedder.encode(text)
+    
+    def get_dimension(self) -> int:
+        return self.embedder.get_sentence_embedding_dimension()
 
 
 # ---------------- UTILS ----------------
-def encode_image(image_path: str) -> str:
+def _encode_image(image_path: str) -> str:
     with open(image_path, "rb") as img_file:
         img_str = base64.b64encode(img_file.read()).decode("utf-8")
         return f"data:image/png;base64,{img_str}"
 
-def build_messages(user_prompt: str, system_prompt: str=None, img_path: str=None) -> list:
+def _build_messages(user_prompt: str, system_prompt: str|None=None, img_path: str|None=None) -> list:
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -172,6 +118,6 @@ def build_messages(user_prompt: str, system_prompt: str=None, img_path: str=None
     else:
         messages.append({"role": "user", "content": [
             {"type": "text", "text": user_prompt},
-            {"type": "image_url", "image_url": {"url": encode_image(img_path)}}
+            {"type": "image_url", "image_url": {"url": _encode_image(img_path)}}
         ]})
     return messages
